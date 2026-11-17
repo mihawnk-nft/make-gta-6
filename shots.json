@@ -1,5 +1,1 @@
-[
-  { "name": "1-start.jpg", "query": "?shot=start&seed=1" },
-  { "name": "2-play.jpg", "query": "?shot=play&seed=1" },
-  { "name": "3-end.jpg", "query": "?shot=end&seed=1" }
-]
+[{"name":"1-cover.jpg","note":"Mara on the central avenue at sunset: downtown towers, traffic, parked cars, pedestrians, one wanted star and a patrol car closing in, HUD and minimap live.","query":"?shot=cover&seed=7"},{"name":"2-drive.jpg","note":"Driving shot (milestone 2): behind the wheel on the beachfront avenue.","query":"?shot=drive&seed=7"},{"name":"3-chase.jpg","note":"Police chase shot (milestone 2): patrol cars behind the stolen car, wanted stars up.","query":"?shot=chase&seed=7"},{"name":"4-mission.jpg","note":"Mission shot (milestone 2): at the mission marker with the objective banner.","query":"?shot=mission&seed=7"}]

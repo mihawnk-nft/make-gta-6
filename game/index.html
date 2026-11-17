@@ -1,19 +1,107 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<link rel="icon" href="data:,">
+<title>SUNSET SHORES — Kota Terbuka</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #1a1210; font-family: "Trebuchet MS", Verdana, sans-serif; }
+  #scene { position: fixed; inset: 0; display: block; }
+  .panel { position: fixed; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8);
+    user-select: none; pointer-events: none; z-index: 5; }
+  #hud-top-left { top: 14px; left: 16px; font-size: 20px; line-height: 1.5; }
+  #hud-top-left .cash { color: #7dff9a; font-weight: bold; font-size: 24px; }
+  #hud-top-left .wanted { color: #ffd23f; letter-spacing: 4px; font-size: 22px; }
+  #hud-top-right { top: 14px; right: 16px; text-align: right; }
+  #minimap { border: 2px solid rgba(255,255,255,.65); border-radius: 8px;
+    background: rgba(10,20,30,.75); box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+  #hud-clock { font-size: 18px; margin-top: 4px; }
+  #hud-mission { top: 14px; left: 50%; transform: translateX(-50%); text-align: center;
+    background: rgba(0,0,0,.55); border-left: 4px solid #ff9f1c; border-radius: 6px;
+    padding: 8px 18px; max-width: 520px; }
+  #hud-mission .mission-title { color: #ff9f1c; font-weight: bold; font-size: 15px;
+    letter-spacing: 1px; }
+  #hud-mission .mission-text { font-size: 17px; margin-top: 2px; }
+  #hud-bottom-left { bottom: 14px; left: 16px; font-size: 14px; opacity: .9;
+    background: rgba(0,0,0,.45); padding: 8px 12px; border-radius: 6px; line-height: 1.6; }
+  #hud-speed { bottom: 14px; right: 16px; font-size: 15px; text-align: right;
+    background: rgba(0,0,0,.45); padding: 8px 12px; border-radius: 6px; }
+  #hud-speed .speed-num { font-size: 30px; font-weight: bold; color: #fff; }
+  #hud-toast { bottom: 110px; left: 50%; transform: translateX(-50%); font-size: 20px;
+    color: #ffe66d; opacity: 0; transition: opacity .3s; text-align: center; }
+  #start-screen { position: fixed; inset: 0; z-index: 10; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(255,140,60,.25), rgba(20,8,40,.82));
+    color: #fff; text-align: center; cursor: pointer; }
+  #start-screen h1 { font-size: 64px; margin: 0; letter-spacing: 6px; color: #ffb347;
+    text-shadow: 0 4px 0 #c1440e, 0 8px 24px rgba(0,0,0,.7); font-style: italic; }
+  #start-screen h2 { font-size: 20px; margin: 6px 0 22px; font-weight: normal;
+    color: #ffe9c9; letter-spacing: 2px; }
+  #start-screen .story { max-width: 560px; font-size: 16px; line-height: 1.6;
+    background: rgba(0,0,0,.45); padding: 14px 20px; border-radius: 10px; }
+  #start-screen .play { margin-top: 26px; font-size: 24px; font-weight: bold;
+    background: #ff9f1c; color: #201200; padding: 12px 42px; border-radius: 999px;
+    box-shadow: 0 4px 0 #b96a00; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  #start-screen .keys { margin-top: 22px; font-size: 14px; opacity: .9; line-height: 1.8; }
+  #pause-screen { position: fixed; inset: 0; z-index: 10; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.6);
+    color: #fff; font-size: 28px; text-align: center; }
+  #loading { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center;
+    justify-content: center; background: #1a1210; color: #ffb347; font-size: 22px; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<div id="loading">Memuat Sunset Shores…</div>
+<canvas id="scene"></canvas>
+
+<div id="hud-top-left" class="panel">
+  <div class="cash">$<span id="hud-cash">250</span></div>
+  <div class="wanted" id="hud-wanted">☆☆☆☆☆</div>
+  <div id="hud-health">❤❤❤❤❤</div>
+</div>
+
+<div id="hud-top-right" class="panel">
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div id="hud-clock">☀ 17:40 &nbsp;·&nbsp; Sunset Shores</div>
+</div>
+
+<div id="hud-mission" class="panel">
+  <div class="mission-title" id="mission-title">MISI 1 — KEDATANGAN</div>
+  <div class="mission-text" id="mission-text">Temui Rico di dermaga barat. Ikuti penanda kuning di minimap.</div>
+</div>
+
+<div id="hud-bottom-left" class="panel">
+  <b>WASD</b> gerak &nbsp;·&nbsp; <b>Shift</b> lari &nbsp;·&nbsp; <b>Spasi</b> lompat<br>
+  <b>E</b> masuk / curi mobil &nbsp;·&nbsp; <b>Mouse</b> putar kamera &nbsp;·&nbsp; <b>Esc</b> jeda
+</div>
+
+<div id="hud-speed" class="panel">
+  <div class="speed-num"><span id="hud-speed-num">0</span> <span style="font-size:15px">km/j</span></div>
+  <div id="hud-mode">🚶 Jalan kaki</div>
+</div>
+
+<div id="hud-toast" class="panel"></div>
+
+<div id="start-screen">
+  <h1>SUNSET SHORES</h1>
+  <h2>KOTA TERBUKA &nbsp;·&nbsp; MOBIL &nbsp;·&nbsp; MISI &nbsp;·&nbsp; POLISI</h2>
+  <div class="story">Kamu <b>Mara Voss</b>, pendatang baru di kota pantai Sunset Shores.
+    Utang lama menagih, kru lama menunggu. Curi mobil, kabur dari polisi,
+    dan kerjakan misi untuk kru — dari dermaga sampai pusat kota.</div>
+  <div class="play">▶ &nbsp;MULAI MAIN</div>
+  <div class="keys">WASD gerak / nyetir &nbsp;·&nbsp; Shift lari &nbsp;·&nbsp; Spasi lompat<br>
+    E masuk &amp; curi mobil &nbsp;·&nbsp; F klakson &nbsp;·&nbsp; Mouse putar kamera &nbsp;·&nbsp; Esc jeda<br>
+    Semua aset orisinal — kota, karakter, dan musik dibuat dari nol di kode ini.</div>
+</div>
+
+<div id="pause-screen"><div>⏸ JEDA<br><span style="font-size:16px">Tekan Esc untuk lanjut · M untuk bisu</span></div></div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
