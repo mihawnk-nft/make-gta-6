@@ -5,7 +5,7 @@ import { chromium } from 'playwright-core';
 import { writeFileSync, statSync } from 'node:fs';
 
 const EXE = '/home/hatch/.cache/ms-playwright/chromium-1255/chrome-linux64/chrome';
-const URL = process.env.GAME_URL || 'http://localhost:8080/';
+const GAME_URL = process.env.GAME_URL || 'http://localhost:8080/';
 const OUT = new URL('../screenshots/', import.meta.url).pathname;
 
 const browser = await chromium.launch({
@@ -19,7 +19,7 @@ async function freshPage() {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-  await page.goto(URL, { waitUntil: 'load' });
+  await page.goto(GAME_URL, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__gameReady === true, null, { timeout: 30000 });
   await page.click('#start-btn');
   await page.waitForFunction(() => window.__game.state.screen === 'play', null, { timeout: 10000 });
@@ -55,18 +55,36 @@ async function stealParked(page) {
 // two traffic cars, the downtown tower, HUD + minimap + Mission 1 banner.
 {
   const page = await freshPage();
-  await ev(page, () => { const g = window.__game; g.teleport(8, 22); g.setWanted(1); });
-  // Wait until a patrol car is close and traffic is in frame.
-  for (let i = 0; i < 60; i += 1) {
+  await ev(page, () => { const g = window.__game; g.teleport(30, 44); g.setWanted(1); });
+  // Wait until a patrol car is close and traffic is in frame. If a cop gets
+  // within 8u Mara steps 12u away from it — clamped to the east-sidewalk
+  // strip (x 24..36) so the frame stays on the central avenue.
+  for (let i = 0; i < 80; i += 1) {
     const ok = await ev(page, () => {
       const g = window.__game;
-      const nearCop = g.police.some((c) => Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 30);
-      const nearTraffic = g.traffic.filter((c) => Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 45).length;
+      if (g.state.screen !== 'play') return false;
+      const p = g.player.pos;
+      for (const c of g.police) {
+        if (Math.hypot(c.x - p.x, c.z - p.z) < 8) {
+          const ax = p.x - c.x;
+          const az = p.z - c.z;
+          const len = Math.hypot(ax, az) || 1;
+          g.teleport(
+            Math.max(24, Math.min(36, p.x + (ax / len) * 12)),
+            Math.max(-120, Math.min(120, p.z + (az / len) * 12)),
+          );
+          return false;
+        }
+      }
+      const nearCop = g.police.some((c) => Math.hypot(c.x - p.x, c.z - p.z) < 25);
+      const nearTraffic = g.traffic.filter((c) => Math.hypot(c.x - p.x, c.z - p.z) < 40).length;
       return nearCop && nearTraffic >= 2;
     });
     if (ok) break;
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(300);
   }
+  // Zoom out for a wider avenue view.
+  for (let i = 0; i < 4; i += 1) { await page.mouse.wheel(0, 120); await page.waitForTimeout(150); }
   await shoot(page, '1-cover.jpg');
   await page.__ctx.close();
 }
@@ -92,9 +110,9 @@ async function stealParked(page) {
   for (let i = 0; i < 90; i += 1) {
     const ok = await ev(page, () => {
       const g = window.__game;
-      if (!g.G.car) return false;
+      if (!g.G.car || g.state.screen !== 'play') return true; // stop waiting, shoot what we have
       const near = g.police.filter((c) => Math.hypot(c.x - g.G.car.x, c.z - g.G.car.z) < 16).length;
-      return g.police.length >= 2 && near >= 2 && g.state.wanted >= 2;
+      return (g.police.length >= 2 && near >= 2 && g.state.wanted >= 2) || g.G.car.condition < 40;
     });
     if (ok) break;
     // Keep the car moving away from the nearest cop so it is not cornered.
@@ -113,8 +131,11 @@ async function stealParked(page) {
     });
     await page.waitForTimeout(800);
   }
-  await shoot(page, '3-chase.jpg');
+  // Shoot while the car is still rolling (foot off the gas): the corner
+  // timer only runs when the car is nearly stopped, so a rolling shot can
+  // never catch the BUSTED overlay, and both patrol cars flank the car.
   await page.keyboard.up('KeyW');
+  await shoot(page, '3-chase.jpg');
   await page.__ctx.close();
 }
 

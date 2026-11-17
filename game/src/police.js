@@ -162,6 +162,10 @@ export function updatePolice(G, dt) {
         G.car.condition = Math.max(0, G.car.condition - POLICE_TUNE.ramDamage);
         G.audio.crash();
         G.hud.toast(`Polisi menabrak mobilmu! Kondisi ${Math.round(G.car.condition)}%`);
+        // Bounce back after the ram instead of driving through the car.
+        cop.speed *= 0.25;
+        cop.x -= Math.sin(cop.angle) * 1.5;
+        cop.z -= Math.cos(cop.angle) * 1.5;
         if (G.car.condition <= 0) {
           bustPlayer(G, 'Mobilmu hancur total!');
           return;
@@ -173,6 +177,19 @@ export function updatePolice(G, dt) {
       }
     }
     if (d < POLICE_TUNE.cornerRange) cornered = true;
+    // Hold a gap from the player's car and from other patrol cars — never
+    // merge into them.
+    const keepApart = (ox, oz) => {
+      const dd = dist2(cop.x, cop.z, ox, oz);
+      if (dd < 3.4 && dd > 0.01) {
+        const push = (3.4 - dd) / dd;
+        cop.x += (cop.x - ox) * push;
+        cop.z += (cop.z - oz) * push;
+      }
+    };
+    keepApart(target.x, target.z);
+    for (const other of police) if (other !== cop) keepApart(other.x, other.z);
+    syncCarMesh(cop);
   }
 
   // Cornered on foot (or in a dead-slow car) for 2.5 s = BUSTED.

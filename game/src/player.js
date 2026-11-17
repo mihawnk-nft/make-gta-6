@@ -147,7 +147,8 @@ export function updateCamera(G, dt) {
     p.cameraSnapped = true;
   }
   const yaw = input.camera.yaw;
-  const dist = input.camera.distance;
+  // Pull back a little while driving so the whole car stays in frame.
+  const dist = input.camera.distance + (G.state.driving && G.car ? 3 : 0);
   const pitch = input.camera.pitch;
   const cx = fx + Math.sin(yaw) * Math.cos(pitch) * dist;
   const cz = fz + Math.cos(yaw) * Math.cos(pitch) * dist;

@@ -2,7 +2,7 @@
 // plus entering and exiting cars (E). The car stays parked where she
 // leaves it, so it can be found again later.
 import { CAR_TUNE } from './config.js';
-import { clamp, angleDiff } from './rng.js';
+import { clamp, dist2 } from './rng.js';
 import { collideCircle, insideWorld } from './city.js';
 import { syncCarMesh } from './vehicles.js';
 import { bustPlayer } from './police.js';
@@ -62,9 +62,9 @@ export function updateDriving(G, dt) {
     if (car.speed > 0.5) car.speed -= CAR_TUNE.brake * dt;
     else car.speed -= CAR_TUNE.accel * 0.55 * dt;
   } else {
-    // Coast down.
-    car.speed -= Math.sign(car.speed) * CAR_TUNE.drag * 4 * dt;
-    if (Math.abs(car.speed) < 0.2) car.speed = 0;
+    // Coast down — exponential, so the car actually stops in a few seconds.
+    car.speed -= car.speed * 1.4 * dt;
+    if (Math.abs(car.speed) < 0.3) car.speed = 0;
   }
   car.speed = clamp(car.speed, -CAR_TUNE.maxReverse, CAR_TUNE.maxSpeed);
 
@@ -84,6 +84,15 @@ export function updateDriving(G, dt) {
   const bounded = insideWorld(solved.x, solved.z);
   car.x = bounded.x;
   car.z = bounded.z;
+  // Do not merge into other cars: push out of any overlap.
+  for (const other of [...G.parkedCars, ...G.traffic, ...G.police]) {
+    const dd = dist2(car.x, car.z, other.x, other.z);
+    if (dd < 3.4 && dd > 0.01) {
+      const push = (3.4 - dd) / dd;
+      car.x += (car.x - other.x) * push;
+      car.z += (car.z - other.z) * push;
+    }
+  }
   syncCarMesh(car);
   G.audio.engine(true, Math.abs(car.speed) / CAR_TUNE.maxSpeed);
 
