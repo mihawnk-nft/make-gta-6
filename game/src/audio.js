@@ -95,6 +95,11 @@ export function createAudio() {
     horn() { tone(370, 0.35, 'sawtooth', 0.18, 0, 340); tone(466, 0.35, 'sawtooth', 0.12); },
     pickup() { tone(523, 0.12, 'sine', 0.2); tone(784, 0.18, 'sine', 0.2, 0.1); },
     siren() { tone(700, 0.5, 'sine', 0.1, 0, 950); tone(950, 0.5, 'sine', 0.1, 0.5, 700); },
+    // A short thud for a punch landing, and a crunch for a car crash.
+    punch() { tone(130, 0.12, 'square', 0.28, 0, 55); tone(70, 0.14, 'sine', 0.22); },
+    crash() { tone(90, 0.28, 'sawtooth', 0.25, 0, 38); tone(55, 0.3, 'square', 0.18); },
+    // Two descending notes when the police finally catch Mara.
+    busted() { tone(392, 0.3, 'square', 0.18); tone(311, 0.45, 'square', 0.18, 0.3); },
     setEngine(on, speed01) {
       if (!ctx || muted) return;
       if (on && !engineOsc) {

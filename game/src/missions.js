@@ -17,6 +17,7 @@ export const MISSIONS = [
     text: 'Curi sebuah mobil di pusat kota dan bawa ke bengkel Lou.',
     target: { x: 25, z: -25 },
     reward: 300,
+    needsCar: true, // only counts when Mara drives a stolen car there
   },
   {
     id: 'sunset-run',
@@ -35,6 +36,12 @@ export function createMissionLog(onToast) {
     get current() { return MISSIONS[index] ?? null; },
     get cash() { return cash; },
     get index() { return index; },
+    // Take a fine (busted by the police). Returns what was actually paid.
+    deduct(amount) {
+      const paid = Math.min(cash, amount);
+      cash -= paid;
+      return paid;
+    },
     target() {
       const mission = MISSIONS[index];
       return mission ? mission.target : null;

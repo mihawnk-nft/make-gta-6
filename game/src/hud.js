@@ -45,7 +45,9 @@ export function createHud() {
       wantedEl.textContent = '★'.repeat(state.wanted) + '☆'.repeat(5 - state.wanted);
       healthEl.textContent = '❤'.repeat(Math.max(0, state.health)) + '🤍'.repeat(Math.max(0, 5 - state.health));
       speedEl.textContent = String(state.speedKmh);
-      modeEl.textContent = state.driving ? '🚗 ' + state.carName : '🚶 Jalan kaki';
+      modeEl.textContent = state.driving
+        ? `🚗 ${state.carName} · kondisi ${state.carHealth}%`
+        : '🚶 Jalan kaki';
       const hours = 17 + Math.floor(state.elapsed / 240);
       const minutes = Math.floor((state.elapsed % 240) / 4);
       clockEl.textContent = `☀ ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}  ·  Sunset Shores`;

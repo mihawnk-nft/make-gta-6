@@ -168,13 +168,16 @@ export function buildCity(scene, rng) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         group.add(mesh);
-        // A rooftop box (AC unit / penthouse) on the taller towers.
+        // A low roof slab (AC unit / penthouse) on the taller towers.
+        // It stays flat and in the roof's own colour: the old tall grey
+        // box poked above the rooflines of nearer buildings and read as
+        // a box floating in the sky at the edge of the frame.
         if (height > 22 && rng.chance(0.6)) {
           const top = new THREE.Mesh(
-            new THREE.BoxGeometry(w * 0.4, 3, d * 0.4),
-            new THREE.MeshStandardMaterial({ color: 0x6b6258, roughness: 1 }),
+            new THREE.BoxGeometry(w * 0.5, 1.2, d * 0.5),
+            new THREE.MeshStandardMaterial({ color: roof.color, roughness: 1 }),
           );
-          top.position.set(bx + ox, height + 1.5, bz + oz);
+          top.position.set(bx + ox, height + 0.4, bz + oz);
           top.castShadow = true;
           group.add(top);
         }

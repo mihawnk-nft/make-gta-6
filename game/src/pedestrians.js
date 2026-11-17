@@ -35,6 +35,7 @@ export function createPedestrians(scene, rng, count = 18) {
       targetX: 0, targetZ: 0,
       speed: rng.range(1.0, 1.8),
       phase: rng.range(0, Math.PI * 2),
+      down: 0, // seconds left lying on the ground after being hit
     });
   }
 
@@ -54,8 +55,26 @@ export function createPedestrians(scene, rng, count = 18) {
 
   return {
     walkers,
+    // Knock a walker flat: they lie on the ground for a while, then get
+    // up somewhere else in the city and walk on as if nothing happened.
+    knockDown(walker) {
+      if (!walker || walker.down > 0) return;
+      walker.down = 2.5;
+      walker.figure.rotation.x = -Math.PI / 2;
+    },
     update(dt) {
       for (const w of walkers) {
+        if (w.down > 0) {
+          w.down -= dt;
+          if (w.down <= 0) {
+            w.figure.rotation.x = 0;
+            w.x = rng.range(-110, 110);
+            w.z = rng.range(-110, 110);
+            w.figure.position.set(w.x, 0, w.z);
+            pickTarget(w);
+          }
+          continue;
+        }
         const dx = w.targetX - w.x;
         const dz = w.targetZ - w.z;
         const dist = Math.hypot(dx, dz);

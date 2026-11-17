@@ -7,6 +7,7 @@ export const PRESS_HORN = 4;
 export const PRESS_PAUSE = 8;
 export const PRESS_MUTE = 16;
 export const PRESS_START = 32;
+export const PRESS_PUNCH = 64;
 
 const FORWARD = new Set(['KeyW', 'ArrowUp']);
 const BACK = new Set(['KeyS', 'ArrowDown']);
@@ -28,7 +29,8 @@ export function createInput(canvas) {
     held.add(event.code);
     if (event.code === 'KeyE') presses |= PRESS_ENTER_CAR;
     else if (event.code === 'Space') { presses |= PRESS_JUMP; event.preventDefault(); }
-    else if (event.code === 'KeyF') presses |= PRESS_HORN;
+    else if (event.code === 'KeyF') presses |= PRESS_PUNCH;
+    else if (event.code === 'KeyH') presses |= PRESS_HORN;
     else if (event.code === 'Escape' || event.code === 'KeyP') presses |= PRESS_PAUSE;
     else if (event.code === 'KeyM') presses |= PRESS_MUTE;
     else if (event.code === 'Enter') presses |= PRESS_START;

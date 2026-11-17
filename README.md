@@ -9,10 +9,11 @@ An original open-world crime game for the [make.fun GTA 6 bounty](https://make.f
 ## What is in the game
 
 - A living city: streets, traffic, pedestrians, day sky, beachfront and downtown
-- On foot and by car: walk, run, jump, steal any parked car and drive it
-- Wanted system: the police respond, chase and ram; lose them to cool down
-- Missions and a story: a short campaign with objectives, rewards and progression
-- Combat, a HUD with a live minimap, a start screen and a save (localStorage)
+- On foot and by car: walk, run, jump, steal any parked car (or a traffic car that stopped for you) and drive it — gas, brake, reverse, steering, a chase camera, speed and condition on the HUD
+- Wanted system: the police respond, chase and ram; patrol cars multiply with the heat, their light bars flash; stars fall one at a time after 20 clean seconds — get cornered or wreck the car and it is BUSTED (fine, respawn, missions continue)
+- Missions and a story: a short campaign with objectives, rewards and progression, with a glowing beacon marking the target in the world
+- Combat: punch with F — knock a pedestrian down, dent a car, or earn a star for hitting a cop
+- A HUD with a live minimap, a start screen and a save (localStorage)
 - Sound and music: procedural WebAudio effects and a synthwave loop, all generated in code
 
 Everything is original: the city, characters, vehicles, names, story, art, sound and music. Nothing from Rockstar Games or any commercial game.
@@ -26,7 +27,7 @@ node serve.ts
 # open http://localhost:8080
 ```
 
-Controls: **WASD** move / drive, **Shift** run, **Space** jump, **E** enter / steal car, **Mouse** camera, **Esc** pause. No network request is made by the game.
+Controls: **WASD** move / drive, **Shift** run, **Space** jump, **E** enter / steal car, **F** punch, **H** horn, **Mouse** camera, **Esc** pause. No network request is made by the game.
 
 ## Entry
 
