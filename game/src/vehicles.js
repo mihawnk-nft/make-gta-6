@@ -1,84 +1,130 @@
-// Cars of Sunset Shores: a low-poly car factory (body, cabin, wheels,
-// headlights, taillights) and the parked cars that line the avenues, waiting
-// to be stolen. Driving itself lives in the traffic and player-car code.
+// Cars: mesh factory + parked-car spawns. A car is a low-poly body, cabin,
+// four spinning wheels and headlights; police cars add a light bar.
 import * as THREE from 'three';
+import { CAR_NAMES, CAR_COLORS, WORLD } from './config.js';
+import { createRng, pick, range } from './rng.js';
 
-export const CAR_COLORS = [
-  0xe74c3c, 0x3498db, 0xf1c40f, 0x2ecc71, 0x9b59b6,
-  0xecf0f1, 0x1abc9c, 0xe67e22, 0x34495e, 0xfd79a8,
-];
-export const CAR_NAMES = [
-  'Comet GT', 'Sunrunner', 'Bay Cruiser', 'Palma Coupe', 'Coral Sedan',
-  'Vista Van', 'Neon Hatch', 'Dune Buggy', 'Marina Sport', 'Coco Taxi',
-];
-
-export function createCarMesh(colorHex) {
-  const car = new THREE.Group();
-  const paint = new THREE.MeshStandardMaterial({
-    color: colorHex, roughness: 0.35, metalness: 0.45,
-  });
-  const glass = new THREE.MeshStandardMaterial({
-    color: 0x1a2b3c, roughness: 0.15, metalness: 0.6,
-  });
-  const tyre = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 1 });
-
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.62, 4.3), paint);
-  body.position.y = 0.55;
-  body.castShadow = true;
-  car.add(body);
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.55, 2.1), glass);
-  cabin.position.set(0, 1.1, -0.25);
-  cabin.castShadow = true;
-  car.add(cabin);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.9), paint);
-  roof.position.set(0, 1.4, -0.25);
-  car.add(roof);
-
-  const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.28, 14);
-  for (const [wx, wz] of [[-0.85, 1.35], [0.85, 1.35], [-0.85, -1.35], [0.85, -1.35]]) {
-    const wheel = new THREE.Mesh(wheelGeo, tyre);
+export function createCarMesh(color, isPolice) {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.45 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.62, 4.4), bodyMat);
+  body.position.y = 0.62;
+  group.add(body);
+  const cabinMat = new THREE.MeshStandardMaterial({ color: 0x1c2733, metalness: 0.6, roughness: 0.25 });
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 2.2), cabinMat);
+  cabin.position.set(0, 1.18, -0.25);
+  group.add(cabin);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x14161a });
+  const wheels = [];
+  for (const [wx, wz] of [[-0.95, 1.45], [0.95, 1.45], [-0.95, -1.45], [0.95, -1.45]]) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.28, 12), wheelMat);
     wheel.rotation.z = Math.PI / 2;
     wheel.position.set(wx, 0.36, wz);
-    wheel.castShadow = true;
-    car.add(wheel);
+    group.add(wheel);
+    wheels.push(wheel);
   }
-  const headMat = new THREE.MeshStandardMaterial({ color: 0xfff6c0, emissive: 0xffedb0, emissiveIntensity: 0.9 });
-  for (const hx of [-0.6, 0.6]) {
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.08), headMat);
-    lamp.position.set(hx, 0.62, 2.16);
-    car.add(lamp);
+  const lightMat = new THREE.MeshStandardMaterial({ color: 0xfff2b0, emissive: 0xffedb0, emissiveIntensity: 0.9 });
+  for (const sx of [-0.6, 0.6]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.2, 0.1), lightMat);
+    lamp.position.set(sx, 0.7, 2.22);
+    group.add(lamp);
   }
-  const tailMat = new THREE.MeshStandardMaterial({ color: 0xff2d2d, emissive: 0xaa0000, emissiveIntensity: 0.8 });
-  for (const tx of [-0.6, 0.6]) {
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.08), tailMat);
-    lamp.position.set(tx, 0.62, -2.16);
-    car.add(lamp);
+  let lightBar = null;
+  let redLight = null;
+  let blueLight = null;
+  if (isPolice) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.22, 0.4), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+    bar.position.set(0, 1.55, -0.25);
+    group.add(bar);
+    redLight = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.24, 0.42),
+      new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xff0000, emissiveIntensity: 2 }),
+    );
+    redLight.position.set(-0.32, 1.55, -0.25);
+    group.add(redLight);
+    blueLight = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.24, 0.42),
+      new THREE.MeshStandardMaterial({ color: 0x2244ff, emissive: 0x0033ff, emissiveIntensity: 2 }),
+    );
+    blueLight.position.set(0.32, 1.55, -0.25);
+    group.add(blueLight);
+    lightBar = bar;
   }
+  return { group, wheels, lightBar, redLight, blueLight };
+}
+
+export function makeCar(G, opts) {
+  const mesh = createCarMesh(opts.color, !!opts.isPolice);
+  mesh.group.position.set(opts.x, 0, opts.z);
+  mesh.group.rotation.y = opts.angle || 0;
+  G.scene.add(mesh.group);
+  const car = {
+    kind: opts.kind || 'parked', // parked | traffic | police | player
+    name: opts.name || 'Mobil',
+    color: opts.color,
+    x: opts.x,
+    z: opts.z,
+    angle: opts.angle || 0,
+    speed: 0,
+    condition: opts.condition ?? 100,
+    stolen: false,
+    stopped: false,
+    mesh,
+    // traffic loop state
+    loop: opts.loop || null,
+    waypoint: 0,
+    // police state
+    ramCooldown: 0,
+    flash: 0,
+  };
   return car;
 }
 
-// Parked cars along the avenue edges. Returns the list so the steal-car
-// interaction (E key) can find the nearest one.
-export function spawnParkedCars(scene, rng) {
-  const parked = [];
+export function syncCarMesh(car) {
+  car.mesh.group.position.x = car.x;
+  car.mesh.group.position.z = car.z;
+  car.mesh.group.rotation.y = car.angle;
+  const spin = car.speed * 0.9;
+  for (const wheel of car.mesh.wheels) wheel.rotation.x += spin * 0.016;
+}
+
+export function removeCar(G, car) {
+  G.scene.remove(car.mesh.group);
+}
+
+// Parked cars line the avenues. Returns the list; the player can steal any.
+export function spawnParkedCars(G) {
+  const rng = createRng(99);
   const spots = [];
-  for (const road of [-100, -50, 0, 50, 100]) {
-    for (let t = -90; t <= 90; t += 30) {
-      spots.push({ x: road + 8.6, z: t, heading: Math.PI / 2 });
-      spots.push({ x: road - 8.6, z: t + 15, heading: -Math.PI / 2 });
+  const roads = WORLD.roads;
+  for (let i = 0; i < 12; i += 1) {
+    const road = pick(rng, roads);
+    const along = pick(rng, [-100, -80, -56, -34, -12, 12, 34, 56, 80, 100]);
+    const side = rng() < 0.5 ? -1 : 1;
+    const horizontal = rng() < 0.5;
+    let x;
+    let z;
+    let angle;
+    if (horizontal) {
+      x = along;
+      z = road + side * 4.2;
+      angle = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    } else {
+      x = road + side * 4.2;
+      z = along;
+      angle = side > 0 ? 0 : Math.PI;
     }
+    // Keep the spawn avenue and the mission targets clear.
+    if (Math.abs(x) < 6 && Math.abs(z - 100) < 8) continue;
+    if (Math.abs(x - 104) < 8 && Math.abs(z - 88) < 8) continue;
+    if (Math.abs(x + 104) < 8 && Math.abs(z + 88) < 8) continue;
+    spots.push({ x, z, angle });
   }
+  const cars = [];
   for (const spot of spots) {
-    if (!rng.chance(0.45)) continue;
-    const color = rng.pick(CAR_COLORS);
-    const mesh = createCarMesh(color);
-    mesh.position.set(spot.x, 0, spot.z);
-    mesh.rotation.y = spot.heading;
-    scene.add(mesh);
-    parked.push({
-      mesh, x: spot.x, z: spot.z, heading: spot.heading,
-      color, name: rng.pick(CAR_NAMES),
-    });
+    const name = pick(rng, CAR_NAMES);
+    const color = pick(rng, CAR_COLORS);
+    cars.push(makeCar(G, { kind: 'parked', name, color, x: spot.x, z: spot.z, angle: spot.angle }));
   }
-  return parked;
+  return cars;
 }

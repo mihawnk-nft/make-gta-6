@@ -1,125 +1,157 @@
-// HUD and minimap: cash, wanted stars, health, mission banner, speed,
-// toasts, and a live top-down map of the city with the player, traffic,
-// pedestrians, the mission target and the police on it.
-import { CITY_HALF } from './city.js';
+// HUD: cash, wanted stars, health bar, mission banner, clock, speed, a live
+// 2D minimap, toasts, and the start / pause / busted screens.
+import { WORLD, MISSIONS } from './config.js';
+import { missionTitle, missionText, currentMission } from './missions.js';
+import { carSpeedKmh } from './driving.js';
 
-const MAP_RANGE = 280; // world units shown across the minimap (whole city + beach)
+export function createHud(G) {
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    cash: $('hud-cash'),
+    stars: $('hud-stars'),
+    healthFill: $('hud-health-fill'),
+    healthText: $('hud-health-text'),
+    banner: $('hud-mission'),
+    bannerText: $('hud-mission-text'),
+    clock: $('hud-clock'),
+    speed: $('hud-speed'),
+    speedValue: $('hud-speed-value'),
+    carName: $('hud-car-name'),
+    carCond: $('hud-car-cond'),
+    minimap: $('minimap'),
+    toast: $('toast'),
+    startScreen: $('start-screen'),
+    pauseScreen: $('pause-screen'),
+    bustedScreen: $('busted-screen'),
+    bustedText: $('busted-text'),
+    flash: $('punch-flash'),
+    hint: $('hud-hint'),
+  };
+  const mapCtx = els.minimap.getContext('2d');
+  let toastTimer = null;
+  let lastBanner = '';
 
-export function createHud() {
-  const cashEl = document.getElementById('hud-cash');
-  const wantedEl = document.getElementById('hud-wanted');
-  const healthEl = document.getElementById('hud-health');
-  const titleEl = document.getElementById('mission-title');
-  const textEl = document.getElementById('mission-text');
-  const speedEl = document.getElementById('hud-speed-num');
-  const modeEl = document.getElementById('hud-mode');
-  const toastEl = document.getElementById('hud-toast');
-  const clockEl = document.getElementById('hud-clock');
-  const map = document.getElementById('minimap');
-  const ctx = map.getContext('2d');
-  let toastTimer = 0;
-
-  function toMap(x, z) {
-    const s = map.width / MAP_RANGE;
-    return { x: map.width / 2 + x * s, y: map.height / 2 + z * s };
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => els.toast.classList.remove('show'), 3200);
   }
 
-  return {
-    showToast(message, seconds = 3) {
-      toastEl.textContent = message;
-      toastEl.style.opacity = '1';
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { toastEl.style.opacity = '0'; }, seconds * 1000);
-    },
-    setMission(mission) {
-      if (!mission) {
-        titleEl.textContent = 'BEBAS — JELAJAHI KOTA';
-        textEl.textContent = 'Tidak ada misi aktif. Curi mobil, kabur dari polisi, bersenang-senanglah.';
-        return;
-      }
-      titleEl.textContent = mission.title;
-      textEl.textContent = mission.text;
-    },
-    update(state) {
-      cashEl.textContent = String(state.cash);
-      wantedEl.textContent = '★'.repeat(state.wanted) + '☆'.repeat(5 - state.wanted);
-      healthEl.textContent = '❤'.repeat(Math.max(0, state.health)) + '🤍'.repeat(Math.max(0, 5 - state.health));
-      speedEl.textContent = String(state.speedKmh);
-      modeEl.textContent = state.driving
-        ? `🚗 ${state.carName} · kondisi ${state.carHealth}%`
-        : '🚶 Jalan kaki';
-      const hours = 17 + Math.floor(state.elapsed / 240);
-      const minutes = Math.floor((state.elapsed % 240) / 4);
-      clockEl.textContent = `☀ ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}  ·  Sunset Shores`;
+  function showBusted(reason) {
+    els.bustedText.textContent = `${reason} Denda $100. Misi tetap berlanjut.`;
+    els.bustedScreen.classList.remove('hidden');
+  }
 
-      // --- minimap ---------------------------------------------------------
-      ctx.clearRect(0, 0, map.width, map.height);
-      ctx.fillStyle = '#16283a';
-      ctx.fillRect(0, 0, map.width, map.height);
-      // Ocean on the west edge.
-      ctx.fillStyle = '#2e86c1';
-      const ocean = toMap(-175, 0);
-      ctx.fillRect(0, 0, ocean.x + 40, map.height);
-      // Sand strip.
-      ctx.fillStyle = '#e8cf96';
-      ctx.fillRect(ocean.x + 40, 0, 8, map.height);
-      // Roads.
-      ctx.strokeStyle = '#5a6068';
-      ctx.lineWidth = 5;
-      for (const c of [-100, -50, 0, 50, 100]) {
-        const a = toMap(c, -CITY_HALF);
-        const b = toMap(c, CITY_HALF);
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        const d = toMap(-CITY_HALF, c);
-        const e = toMap(CITY_HALF, c);
-        ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
-      }
-      // Buildings.
-      ctx.fillStyle = '#8a94a6';
-      for (const building of state.buildings) {
-        const p = toMap(building.x - building.w / 2, building.z - building.d / 2);
-        const s = map.width / MAP_RANGE;
-        ctx.fillRect(p.x, p.y, building.w * s, building.d * s);
-      }
-      // Mission target: pulsing yellow diamond.
-      if (state.target) {
-        const p = toMap(state.target.x, state.target.z);
-        const pulse = 5 + Math.sin(state.elapsed * 4) * 2;
-        ctx.fillStyle = '#ffd23f';
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y - pulse);
-        ctx.lineTo(p.x + pulse, p.y);
-        ctx.lineTo(p.x, p.y + pulse);
-        ctx.lineTo(p.x - pulse, p.y);
-        ctx.closePath();
-        ctx.fill();
-      }
-      // Traffic (white) and pedestrians (green).
-      ctx.fillStyle = '#ffffff';
-      for (const car of state.traffic) {
-        const p = toMap(car.x, car.z);
-        ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
-      }
-      ctx.fillStyle = '#7dff9a';
-      for (const ped of state.peds) {
-        const p = toMap(ped.x, ped.z);
-        ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
-      }
-      // Police (flashing blue/red) and the player (white arrow).
-      for (const cop of state.police) {
-        const p = toMap(cop.x, cop.z);
-        ctx.fillStyle = Math.floor(state.elapsed * 4) % 2 === 0 ? '#3388ff' : '#ff3333';
-        ctx.beginPath(); ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2); ctx.fill();
-      }
-      const pp = toMap(state.playerX, state.playerZ);
-      ctx.fillStyle = '#ffffff';
-      ctx.save();
-      ctx.translate(pp.x, pp.y);
-      ctx.rotate(state.playerHeading + Math.PI); // map north is -z, heading 0 faces +z
+  function hideBusted() {
+    els.bustedScreen.classList.add('hidden');
+  }
+
+  function fmtClock(minutes) {
+    const h = Math.floor(minutes / 60) % 24;
+    const m = Math.floor(minutes % 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  function drawMinimap() {
+    const s = G.state;
+    const ctx = mapCtx;
+    const W = 170;
+    const H = 170;
+    ctx.clearRect(0, 0, W, H);
+    const toMap = (x, z) => [
+      ((x - WORLD.minX) / (WORLD.maxX - WORLD.minX)) * W,
+      ((z - WORLD.minZ) / (WORLD.maxZ - WORLD.minZ)) * H,
+    ];
+    // Sand + sea on the west.
+    ctx.fillStyle = '#274b5e';
+    ctx.fillRect(0, 0, W, H);
+    const [sandX] = toMap(WORLD.beachX, 0);
+    ctx.fillStyle = '#c9a86a';
+    ctx.fillRect(sandX, 0, W - sandX, H);
+    ctx.fillStyle = '#5a7a5a';
+    ctx.fillRect(sandX, 0, W - sandX, H);
+    // Roads.
+    ctx.fillStyle = '#3a3f4a';
+    for (const r of WORLD.roads) {
+      const [rx] = toMap(r, 0);
+      const [, rz] = toMap(0, r);
+      ctx.fillRect(rx - 3, 0, 6, H);
+      ctx.fillRect(0, rz - 3, W, 6);
+    }
+    const dot = (x, z, color, r) => {
+      const [mx, my] = toMap(x, z);
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.moveTo(0, -6); ctx.lineTo(4.5, 5); ctx.lineTo(-4.5, 5); ctx.closePath();
+      ctx.arc(mx, my, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.restore();
-    },
-  };
+    };
+    // Mission target star.
+    const m = currentMission(G);
+    if (m) {
+      const [mx, my] = toMap(m.target.x, m.target.z);
+      ctx.fillStyle = '#ffd23c';
+      ctx.beginPath();
+      for (let i = 0; i < 5; i += 1) {
+        const a = -Math.PI / 2 + (i * Math.PI * 2) / 5;
+        const a2 = a + Math.PI / 5;
+        ctx.lineTo(mx + Math.cos(a) * 7, my + Math.sin(a) * 7);
+        ctx.lineTo(mx + Math.cos(a2) * 3, my + Math.sin(a2) * 3);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    for (const car of G.parkedCars) dot(car.x, car.z, '#7fd07f', 2);
+    for (const car of G.traffic) dot(car.x, car.z, '#6fb7ff', 2.5);
+    for (const ped of G.peds) if (!ped.down) dot(ped.x, ped.z, '#cccccc', 1.6);
+    for (const cop of G.police) dot(cop.x, cop.z, '#ff4444', 3.2);
+    // Player arrow.
+    const px = s.driving && G.car ? G.car.x : G.player.pos.x;
+    const pz = s.driving && G.car ? G.car.z : G.player.pos.z;
+    const [mx, my] = toMap(px, pz);
+    const heading = s.driving && G.car ? G.car.angle : G.player.heading;
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.rotate(Math.PI - heading);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(4.5, 5);
+    ctx.lineTo(-4.5, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function update() {
+    const s = G.state;
+    els.cash.textContent = `$${s.cash}`;
+    els.stars.textContent = '★'.repeat(s.wanted) + '☆'.repeat(5 - s.wanted);
+    els.stars.style.color = s.wanted > 0 ? '#ff5544' : '#888888';
+    els.healthFill.style.width = `${Math.max(0, s.health)}%`;
+    els.healthText.textContent = `${Math.round(s.health)}`;
+    els.clock.textContent = fmtClock(s.clockMin);
+    const title = missionTitle(G);
+    if (title !== lastBanner) {
+      lastBanner = title;
+      els.banner.textContent = title;
+      els.bannerText.textContent = missionText(G);
+    }
+    if (s.driving && G.car) {
+      els.speed.classList.remove('hidden');
+      els.speedValue.textContent = carSpeedKmh(G.car);
+      els.carName.textContent = G.car.name + (G.car.stolen ? ' (curian)' : '');
+      els.carCond.textContent = `Kondisi ${Math.round(G.car.condition)}%`;
+    } else {
+      els.speed.classList.add('hidden');
+    }
+    els.hint.textContent = s.driving
+      ? 'W/S gas & rem · A/D belok · E keluar · F pukul · H klakson · Esc jeda'
+      : 'WASD jalan · Shift lari · Spasi lompat · E masuk mobil · F pukul · Esc jeda';
+    els.flash.style.opacity = G.combatFlash > 0 ? '0.35' : '0';
+    if (G.combatFlash > 0) G.combatFlash = Math.max(0, G.combatFlash - 0.08);
+    drawMinimap();
+  }
+
+  return { els, toast, showBusted, hideBusted, update };
 }

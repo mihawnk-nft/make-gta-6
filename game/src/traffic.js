@@ -1,108 +1,89 @@
-// Traffic: ordinary drivers looping around the city's blocks on the road
-// grid, at city speeds, so the avenues always feel alive. Each car follows a
-// rectangular loop around one block; at each corner it turns to the next leg.
-import { createCarMesh, CAR_COLORS } from './vehicles.js';
+// Traffic: 14 cars driving on the right around the blocks. Each car follows
+// a rectangular loop on the roads around one block. A car stops when Mara
+// stands in front of it — and then it can be stolen with E.
+import { WORLD } from './config.js';
+import { createRng, pick, range, dist2, angleDiff } from './rng.js';
+import { makeCar, syncCarMesh } from './vehicles.js';
+import { CAR_NAMES, CAR_COLORS } from './config.js';
 
-export function createTraffic(scene, rng, count = 14) {
+function loopWaypoints(bx, bz) {
+  // Rectangle on the four roads around block (bx, bz), driven clockwise
+  // (right-hand traffic): the loop's corners, in driving order.
+  const r = 22;
+  return [
+    { x: bx - r, z: bz - r },
+    { x: bx + r, z: bz - r },
+    { x: bx + r, z: bz + r },
+    { x: bx - r, z: bz + r },
+  ];
+}
+
+export function spawnTraffic(G) {
+  const rng = createRng(41);
   const cars = [];
-  const blockCenters = [-75, -25, 25, 75];
-  for (let i = 0; i < count; i++) {
-    const bx = rng.pick(blockCenters);
-    const bz = rng.pick(blockCenters);
-    const half = 25;
-    const lane = 3.2;
-    // Rectangle on the four roads around the block; the lane offset puts
-    // every leg on its right-hand side of the road. Half the drivers go
-    // clockwise, half counter-clockwise (mirrored corners, same rule).
-    const clockwise = rng.chance(0.5);
-    const loop = clockwise ? [
-      { x: bx - half + lane, z: bz - half + lane },
-      { x: bx + half - lane, z: bz - half + lane },
-      { x: bx + half - lane, z: bz + half - lane },
-      { x: bx - half + lane, z: bz + half - lane },
-    ] : [
-      { x: bx + half + lane, z: bz - half - lane },
-      { x: bx - half - lane, z: bz - half - lane },
-      { x: bx - half - lane, z: bz + half + lane },
-      { x: bx + half + lane, z: bz + half + lane },
-    ];
-    const mesh = createCarMesh(rng.pick(CAR_COLORS));
-    scene.add(mesh);
-    const cruise = rng.range(7, 11);
-    cars.push({
-      mesh,
+  const blocks = [];
+  for (const bx of WORLD.blocks) for (const bz of WORLD.blocks) blocks.push({ bx, bz });
+  for (let i = 0; i < 14; i += 1) {
+    const block = blocks[i % blocks.length];
+    const loop = loopWaypoints(block.bx, block.bz);
+    const start = Math.floor(rng() * 4);
+    const wp = loop[start];
+    const next = loop[(start + 1) % 4];
+    const angle = Math.atan2(next.x - wp.x, next.z - wp.z);
+    // Spread cars along the starting edge.
+    const t = rng();
+    const x = wp.x + (next.x - wp.x) * t;
+    const z = wp.z + (next.z - wp.z) * t;
+    const car = makeCar(G, {
+      kind: 'traffic',
+      name: pick(rng, CAR_NAMES),
+      color: pick(rng, CAR_COLORS),
+      x,
+      z,
+      angle,
       loop,
-      leg: rng.int(0, 3),
-      t: rng.next(),
-      speed: cruise,
-      baseSpeed: cruise,
-      curSpeed: cruise, // current speed: drops to 0 when yielding to the player
     });
+    car.waypoint = (start + 1) % 4;
+    car.speed = range(rng, 7, 10.5);
+    car.cruise = car.speed;
+    cars.push(car);
   }
+  return cars;
+}
 
-  function placeCar(car) {
-    const a = car.loop[car.leg];
-    const b = car.loop[(car.leg + 1) % 4];
-    const x = a.x + (b.x - a.x) * car.t;
-    const z = a.z + (b.z - a.z) * car.t;
-    car.mesh.position.set(x, 0, z);
-    car.mesh.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
-    return { x, z };
+export function updateTraffic(G, dt) {
+  const p = G.player;
+  for (const car of G.traffic) {
+    if (!car.loop) continue;
+    const target = car.loop[car.waypoint];
+    const dx = target.x - car.x;
+    const dz = target.z - car.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 2.5) {
+      car.waypoint = (car.waypoint + 1) % 4;
+      continue;
+    }
+    const wantAngle = Math.atan2(dx, dz);
+    car.angle += angleDiff(car.angle, wantAngle) * Math.min(1, dt * 4);
+
+    // Stop for Mara standing in front, or for the car ahead.
+    const fx = car.x + Math.sin(car.angle) * 3.2;
+    const fz = car.z + Math.cos(car.angle) * 3.2;
+    let blocked = false;
+    if (!G.state.driving && dist2(fx, fz, p.pos.x, p.pos.z) < 3.4) blocked = true;
+    if (G.state.driving && G.car && dist2(fx, fz, G.car.x, G.car.z) < 4.5) blocked = true;
+    for (const other of G.traffic) {
+      if (other === car) continue;
+      if (dist2(fx, fz, other.x, other.z) < 4.5) { blocked = true; break; }
+    }
+    for (const cop of G.police) {
+      if (dist2(fx, fz, cop.x, cop.z) < 4.5) { blocked = true; break; }
+    }
+    car.stopped = blocked;
+    const targetSpeed = blocked ? 0 : car.cruise;
+    car.speed += (targetSpeed - car.speed) * Math.min(1, dt * 3);
+    car.x += Math.sin(car.angle) * car.speed * dt;
+    car.z += Math.cos(car.angle) * car.speed * dt;
+    syncCarMesh(car);
   }
-
-  return {
-    cars,
-    // Take a car out of the loop for good (Mara just stole it).
-    remove(car) {
-      const i = cars.indexOf(car);
-      if (i >= 0) cars.splice(i, 1);
-    },
-    // The nearest car that has stopped, within maxDist of (x, z) — the
-    // one Mara can climb into with E. A stopped car is either yielding
-    // to her or crawling after a crash.
-    stoppedNear(x, z, maxDist) {
-      let best = null;
-      let bestDist = maxDist;
-      for (const car of cars) {
-        if (car.curSpeed > 0.5) continue;
-        const d = Math.hypot(car.mesh.position.x - x, car.mesh.position.z - z);
-        if (d < bestDist) { best = car; bestDist = d; }
-      }
-      return best;
-    },
-    update(dt, playerPos) {
-      for (const car of cars) {
-        // Yield: when Mara stands in front of the car, brake to a stop
-        // instead of running her over; pull away again once she is clear.
-        let blocked = false;
-        if (playerPos) {
-          const a = car.loop[car.leg];
-          const b = car.loop[(car.leg + 1) % 4];
-          const fx = b.x - a.x;
-          const fz = b.z - a.z;
-          const fl = Math.hypot(fx, fz) || 1;
-          const px = playerPos.x - car.mesh.position.x;
-          const pz = playerPos.z - car.mesh.position.z;
-          const dist = Math.hypot(px, pz);
-          const ahead = (px * fx + pz * fz) / fl;
-          blocked = dist < 9 && ahead > 0;
-        }
-        car.curSpeed = blocked
-          ? Math.max(0, car.curSpeed - 24 * dt)
-          : Math.min(car.baseSpeed, car.curSpeed + 8 * dt);
-        const a = car.loop[car.leg];
-        const b = car.loop[(car.leg + 1) % 4];
-        const legLen = Math.hypot(b.x - a.x, b.z - a.z);
-        car.t += (car.curSpeed * dt) / legLen;
-        if (car.t >= 1) {
-          car.t -= 1;
-          car.leg = (car.leg + 1) % 4;
-        }
-        placeCar(car);
-      }
-    },
-    positions() {
-      return cars.map((car) => ({ x: car.mesh.position.x, z: car.mesh.position.z }));
-    },
-  };
 }

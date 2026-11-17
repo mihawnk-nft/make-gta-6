@@ -1,159 +1,183 @@
-// Wanted system and the Sunset Shores police: stars rise when the player
-// steals a car or hits someone, patrol cars spawn and chase, and the heat
-// cools off when the player breaks line of sight and stays clean.
-// M2: patrol cars chase and ram the player's car, the light bars flash,
-// stars fall one at a time after 20 clean seconds, and getting cornered
-// — or wrecking the car — means BUSTED.
-import * as THREE from 'three';
-import { createCarMesh } from './vehicles.js';
+// Wanted + police: patrol cars chase Mara, ram her car, call one backup car
+// per star (max 3), and lose her if she gets far away. A 30-second chase
+// adds a star; 20 seconds unseen drops one. Cornered or totalled = BUSTED.
+import { POLICE_TUNE, MAX_WANTED, BUSTED_FINE, SPAWN } from './config.js';
+import { dist2, angleDiff } from './rng.js';
+import { makeCar, syncCarMesh, removeCar } from './vehicles.js';
+import { writeSave } from './save.js';
 
-const MAX_WANTED = 5;
-const COOLDOWN_SECONDS = 20;
+function playerPos(G) {
+  if (G.state.driving && G.car) return { x: G.car.x, z: G.car.z };
+  return { x: G.player.pos.x, z: G.player.pos.z };
+}
 
-export function createPolice(scene) {
-  const patrol = [];
-  let wanted = 0;
-  let cleanTimer = 0;
-  let chaseTimer = 0;
-  let caughtTimer = 0;
-  let spawnTimer = 0;
-  let ramCooldown = 0;
-  let clock = 0;
-  let busted = false;
-  let ramHandler = null;
+function spawnCop(G, nearX, nearZ) {
+  // Appear on the nearest avenue a short way from the player, facing them.
+  const roads = [-110, -66, -22, 22, 66, 110];
+  const rx = roads.reduce((a, b) => (Math.abs(b - nearX) < Math.abs(a - nearX) ? b : a));
+  const x = rx;
+  const z = Math.max(-120, Math.min(120, nearZ + 30));
+  const angle = Math.atan2(nearX - x, nearZ - z);
+  const car = makeCar(G, {
+    kind: 'police',
+    name: 'Patroli Sunset',
+    color: 0xf2f2f2,
+    x,
+    z,
+    angle,
+    isPolice: true,
+  });
+  car.speed = 10;
+  return car;
+}
 
-  function spawnPatrolCar(x, z) {
-    const mesh = createCarMesh(0x1a1a2e);
-    // A red-and-blue light bar on the roof marks the patrol car.
-    const redMat = new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xff0000, emissiveIntensity: 1.5 });
-    const red = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.3), redMat);
-    red.position.set(-0.32, 1.5, -0.25);
-    mesh.add(red);
-    const blueMat = new THREE.MeshStandardMaterial({ color: 0x2266ff, emissive: 0x0033ff, emissiveIntensity: 1.5 });
-    const blue = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.3), blueMat);
-    blue.position.set(0.32, 1.5, -0.25);
-    mesh.add(blue);
-    mesh.position.set(x, 0, z);
-    scene.add(mesh);
-    const car = { mesh, x, z, speed: 0, redMat, blueMat };
-    patrol.push(car);
-    return car;
+// BUSTED: fine, wanted reset, respawn on foot at the spawn point. The
+// mission chain continues from the last index — progress is never lost.
+export function bustPlayer(G, reason) {
+  const s = G.state;
+  if (s.screen === 'busted') return;
+  s.screen = 'busted';
+  s.bustedReason = reason;
+  s.cash = Math.max(0, s.cash - BUSTED_FINE);
+  s.wanted = 0;
+  s.chaseTimer = 0;
+  s.hiddenTimer = 0;
+  s.bustedTimer = 0;
+  G.audio.siren(false);
+  G.audio.engine(false, 0);
+  G.audio.busted();
+  if (s.driving) {
+    // The wrecked/stolen car stays where it was.
+    const wreck = G.car;
+    if (wreck) {
+      wreck.speed = 0;
+      wreck.kind = 'parked';
+      G.parkedCars.push(wreck);
+    }
+    G.car = null;
+    s.driving = false;
+  }
+  // Clear the chase cars.
+  for (const cop of G.police) removeCar(G, cop);
+  G.police.length = 0;
+  // Respawn on foot at the spawn point; the mission chain continues.
+  G.player.pos.x = SPAWN.x;
+  G.player.pos.z = SPAWN.z;
+  G.player.pos.y = 0;
+  G.player.vy = 0;
+  G.player.heading = SPAWN.heading;
+  G.player.mesh.visible = true;
+  G.player.mesh.position.set(SPAWN.x, 0, SPAWN.z);
+  writeSave(G);
+  G.hud.showBusted(reason);
+}
+
+export function updatePolice(G, dt) {
+  const s = G.state;
+  const police = G.police;
+
+  if (s.wanted <= 0) {
+    // No heat: any leftover patrol cars drive off and despawn.
+    for (let i = police.length - 1; i >= 0; i -= 1) {
+      const cop = police[i];
+      cop.speed = Math.max(0, cop.speed - dt * 8);
+      cop.x += Math.sin(cop.angle) * cop.speed * dt;
+      cop.z += Math.cos(cop.angle) * cop.speed * dt;
+      syncCarMesh(cop);
+      if (cop.speed <= 0.1) {
+        removeCar(G, cop);
+        police.splice(i, 1);
+      }
+    }
+    if (police.length === 0) G.audio.siren(false);
+    s.chaseTimer = 0;
+    s.hiddenTimer = 0;
+    s.bustedTimer = 0;
+    return;
   }
 
-  return {
-    get wanted() { return wanted; },
-    get busted() { return busted; },
-    patrol,
-    raiseWanted(level) {
-      wanted = Math.min(MAX_WANTED, Math.max(wanted, level));
-      cleanTimer = 0;
-      // A ram raising the heat does NOT erase the chase timer: getting
-      // hit is part of the chase, and the 30 s clock keeps running.
-      if (wanted >= 1 && patrol.length === 0) spawnPatrolCar(20, -30);
-    },
-    // Add stars on top of the current level (hitting someone, long chase).
-    addWanted(n) { this.raiseWanted(wanted + n); },
-    lowerWanted() {
-      wanted = Math.max(0, wanted - 1);
-    },
-    // The game loop's answer to a patrol car ramming the player's car.
-    setRamHandler(fn) { ramHandler = fn; },
-    // Called after a bust is resolved: heat gone, patrol stands down.
-    resetAfterBust() {
-      wanted = 0;
-      cleanTimer = 0;
-      chaseTimer = 0;
-      caughtTimer = 0;
-      busted = false;
-    },
-    update(dt, playerPos, drive) {
-      clock += dt;
-      ramCooldown = Math.max(0, ramCooldown - dt);
-      spawnTimer = Math.max(0, spawnTimer - dt);
-      const driving = Boolean(drive && drive.driving);
-      const playerSpeed = drive ? drive.speedKmh : 0;
+  // Reinforcements: one patrol car per star, up to 3.
+  const want = Math.min(s.wanted, POLICE_TUNE.maxCars);
+  const target = playerPos(G);
+  while (police.length < want) {
+    police.push(spawnCop(G, target.x, target.z));
+    G.hud.toast('Bala bantuan polisi datang!');
+  }
+  while (police.length > want) {
+    const cop = police.pop();
+    removeCar(G, cop);
+  }
+  G.audio.siren(true);
 
-      // Reinforcements: up to one patrol car per wanted star (max 3).
-      if (wanted > 0 && patrol.length < Math.min(wanted, 3) && spawnTimer <= 0) {
-        spawnTimer = 2;
-        const angle = Math.random() * Math.PI * 2;
-        spawnPatrolCar(
-          Math.max(-160, Math.min(120, playerPos.x + Math.cos(angle) * 38)),
-          Math.max(-120, Math.min(120, playerPos.z + Math.sin(angle) * 38)),
-        );
-      }
+  // Timers: a chase that drags on adds a star; staying unseen drops one.
+  s.chaseTimer += dt;
+  if (s.chaseTimer >= POLICE_TUNE.chaseStarSeconds) {
+    s.chaseTimer = 0;
+    if (s.wanted < MAX_WANTED) {
+      s.wanted = Math.min(MAX_WANTED, s.wanted + 1);
+      G.hud.toast(`Kejar-kejaran berlanjut — Wanted naik ke ${s.wanted} ★`);
+    }
+  }
+  let nearest = Infinity;
+  for (const cop of police) nearest = Math.min(nearest, dist2(cop.x, cop.z, target.x, target.z));
+  if (nearest > POLICE_TUNE.lostRange) {
+    s.hiddenTimer += dt;
+    if (s.hiddenTimer >= POLICE_TUNE.hiddenStarSeconds) {
+      s.hiddenTimer = 0;
+      s.wanted = Math.max(0, s.wanted - 1);
+      s.chaseTimer = 0;
+      G.hud.toast(`Kamu lolos — Wanted turun ke ${s.wanted} ★`);
+    }
+  } else {
+    s.hiddenTimer = 0;
+  }
 
-      // Heat cools one star at a time, but only after 20 seconds with
-      // no patrol car close enough to see the player.
-      let nearest = Infinity;
-      for (const car of patrol) {
-        nearest = Math.min(nearest, Math.hypot(playerPos.x - car.x, playerPos.z - car.z));
-      }
-      if (wanted > 0) {
-        if (nearest < 55) cleanTimer = 0;
-        else {
-          cleanTimer += dt;
-          if (cleanTimer > COOLDOWN_SECONDS) {
-            wanted = Math.max(0, wanted - 1);
-            cleanTimer = 0;
-          }
-        }
-        // Being chased for a long time is its own crime: +1 star per
-        // 30 seconds with a patrol car on the player's tail.
-        if (nearest < 25) {
-          chaseTimer += dt;
-          if (chaseTimer > 30) {
-            chaseTimer = 0;
-            this.addWanted(1);
-          }
-        } else {
-          chaseTimer = Math.max(0, chaseTimer - dt);
-        }
-      }
+  // Chase steering + ramming.
+  let cornered = false;
+  for (const cop of police) {
+    const d = dist2(cop.x, cop.z, target.x, target.z);
+    const lost = d > POLICE_TUNE.lostRange;
+    const maxSpeed = POLICE_TUNE.maxSpeed * (lost ? POLICE_TUNE.lostSpeedFactor : 1);
+    const wantAngle = Math.atan2(target.x - cop.x, target.z - cop.z);
+    cop.angle += angleDiff(cop.angle, wantAngle) * Math.min(1, dt * 2.6);
+    cop.speed = Math.min(maxSpeed, cop.speed + POLICE_TUNE.accel * dt);
+    cop.x += Math.sin(cop.angle) * cop.speed * dt;
+    cop.z += Math.cos(cop.angle) * cop.speed * dt;
+    cop.flash += dt;
+    // Flashing light bar.
+    const on = Math.floor(cop.flash * 4) % 2 === 0;
+    if (cop.mesh.redLight) cop.mesh.redLight.visible = on;
+    if (cop.mesh.blueLight) cop.mesh.blueLight.visible = !on;
+    syncCarMesh(cop);
 
-      // Patrol cars cruise the avenue near the player while wanted.
-      for (const car of patrol) {
-        // Flash the light bar, red and blue alternating.
-        const phase = Math.floor(clock * 5) % 2 === 0;
-        car.redMat.emissiveIntensity = phase ? 2.5 : 0.3;
-        car.blueMat.emissiveIntensity = phase ? 0.3 : 2.5;
-        if (wanted === 0) continue;
-        const dx = playerPos.x - car.x;
-        const dz = playerPos.z - car.z;
-        const dist = Math.hypot(dx, dz);
-        // Faster after a car than after a pedestrian, but never faster
-        // than the player's top speed: escape stays possible.
-        const speed = driving
-          ? Math.min(24, 17 + wanted * 2)
-          : 9 + wanted * 1.5;
-        // Lose the trail: a patrol car left far behind drops to a
-        // searching cruise, so a fast getaway can actually break away
-        // and the heat can cool off instead of chasing forever.
-        const chaseSpeed = dist > 45 ? speed * 0.55 : speed;
-        if (dist > 2.5) {
-          car.x += (dx / dist) * chaseSpeed * dt;
-          car.z += (dz / dist) * chaseSpeed * dt;
-          car.mesh.position.set(car.x, 0, car.z);
-          car.mesh.rotation.y = Math.atan2(dx, dz);
+    cop.ramCooldown = Math.max(0, cop.ramCooldown - dt);
+    if (d < POLICE_TUNE.ramRange && cop.ramCooldown <= 0) {
+      cop.ramCooldown = POLICE_TUNE.ramCooldown;
+      if (s.driving && G.car) {
+        G.car.condition = Math.max(0, G.car.condition - POLICE_TUNE.ramDamage);
+        G.audio.crash();
+        G.hud.toast(`Polisi menabrak mobilmu! Kondisi ${Math.round(G.car.condition)}%`);
+        if (G.car.condition <= 0) {
+          bustPlayer(G, 'Mobilmu hancur total!');
+          return;
         }
-        // Ram the player's car on contact; on foot, being cornered
-        // for a few seconds means getting caught.
-        if (driving && dist < 3.4) {
-          if (ramCooldown <= 0) {
-            ramCooldown = 1.2;
-            if (ramHandler) ramHandler(14);
-          }
-          car.x -= (dx / (dist || 1)) * 1.5;
-          car.z -= (dz / (dist || 1)) * 1.5;
-        }
-        const cornered = driving ? (playerSpeed < 5 && dist < 3.5) : dist < 2.2;
-        if (cornered) {
-          caughtTimer += dt;
-          if (caughtTimer > 2.5) busted = true;
-        } else {
-          caughtTimer = Math.max(0, caughtTimer - dt * 2);
-        }
+      } else {
+        // On foot, a ram is a shove — the corner timer decides the bust.
+        G.player.pos.x += Math.sin(cop.angle) * 1.2;
+        G.player.pos.z += Math.cos(cop.angle) * 1.2;
       }
-    },
-  };
+    }
+    if (d < POLICE_TUNE.cornerRange) cornered = true;
+  }
+
+  // Cornered on foot (or in a dead-slow car) for 2.5 s = BUSTED.
+  if (cornered && (!s.driving || (G.car && Math.abs(G.car.speed) < 2))) {
+    s.bustedTimer += dt;
+    if (s.bustedTimer >= POLICE_TUNE.cornerTime) {
+      bustPlayer(G, 'Kamu terpojok polisi!');
+      return;
+    }
+  } else {
+    s.bustedTimer = 0;
+  }
 }

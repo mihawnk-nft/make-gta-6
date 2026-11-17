@@ -1,76 +1,85 @@
-// Missions and the story of Sunset Shores: Mara Voss arrives owing money,
-// and the crew hands her jobs one at a time. Each mission has a title, an
-// objective line for the HUD, a target point for the minimap, and a cash
-// reward. M1 ships the first three missions with their targets wired;
-// the objective checks (arrive / deliver / escape) land in the next pass.
-export const MISSIONS = [
-  {
-    id: 'arrival',
-    title: 'MISI 1 — KEDATANGAN',
-    text: 'Temui Rico di dermaga barat. Ikuti penanda kuning di minimap.',
-    target: { x: -132, z: 24 },
-    reward: 150,
-  },
-  {
-    id: 'borrowed-wheels',
-    title: 'MISI 2 — MOBIL PINJAMAN',
-    text: 'Curi sebuah mobil di pusat kota dan bawa ke bengkel Lou.',
-    target: { x: 25, z: -25 },
-    reward: 300,
-    needsCar: true, // only counts when Mara drives a stolen car there
-  },
-  {
-    id: 'sunset-run',
-    title: 'MISI 3 — LARIAN SENJA',
-    text: 'Antar paket ke menara kaca sebelum matahari tenggelam. Polisi mengawasi.',
-    target: { x: 75, z: 75 },
-    reward: 500,
-  },
-];
+// Missions: three chained jobs for Mara Voss. Each target is marked by a
+// tall yellow light beam in the world and a star on the minimap. Rewards
+// set the cash to the exact spec amounts ($400 / $700 / $1200).
+import * as THREE from 'three';
+import { MISSIONS } from './config.js';
+import { dist2 } from './rng.js';
+import { writeSave } from './save.js';
 
-export function createMissionLog(onToast) {
-  let index = 0;
-  let cash = 250;
+export function createMissions(G) {
+  // Vertical beacon beam + a glowing ring at the target.
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: 0xffd23c,
+    transparent: true,
+    opacity: 0.35,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 60, 12, 1, true), beamMat);
+  beam.position.y = 30;
+  G.scene.add(beam);
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(2.2, 3.4, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffd23c, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.1;
+  G.scene.add(ring);
+  return { beam, ring };
+}
 
-  return {
-    get current() { return MISSIONS[index] ?? null; },
-    get cash() { return cash; },
-    get index() { return index; },
-    // Take a fine (busted by the police). Returns what was actually paid.
-    deduct(amount) {
-      const paid = Math.min(cash, amount);
-      cash -= paid;
-      return paid;
-    },
-    // Restore an exact save: cash and progress as saved, so a fine paid
-    // before quitting is not silently refunded by a fresh playthrough.
-    restore(savedCash, savedIndex) {
-      if (typeof savedCash === 'number' && Number.isFinite(savedCash)) {
-        cash = Math.max(0, savedCash);
-      }
-      if (typeof savedIndex === 'number' && Number.isFinite(savedIndex)) {
-        index = Math.max(0, Math.min(savedIndex, MISSIONS.length));
-      }
-    },
-    target() {
-      const mission = MISSIONS[index];
-      return mission ? mission.target : null;
-    },
-    completeCurrent() {
-      const mission = MISSIONS[index];
-      if (!mission) return;
-      cash += mission.reward;
-      onToast(`Misi selesai! +$${mission.reward}`);
-      index += 1;
-      const next = MISSIONS[index];
-      if (next) onToast(`${next.title}: ${next.text}`);
-      else onToast('Semua misi selesai — Sunset Shores milikmu sekarang.');
-    },
-    // True when the player stands on the current target.
-    checkArrival(x, z) {
-      const target = this.target();
-      if (!target) return false;
-      return Math.hypot(x - target.x, z - target.z) < 4;
-    },
-  };
+export function currentMission(G) {
+  const idx = G.state.missionIndex;
+  return idx < MISSIONS.length ? MISSIONS[idx] : null;
+}
+
+export function missionTitle(G) {
+  const m = currentMission(G);
+  return m ? m.title : 'BEBAS — JELAJAHI KOTA';
+}
+
+export function missionText(G) {
+  const m = currentMission(G);
+  return m ? m.text : 'Semua misi selesai. Kota ini milikmu, Mara.';
+}
+
+export function updateMissions(G, dt) {
+  const m = currentMission(G);
+  const beacon = G.missions;
+  if (!m) {
+    beacon.beam.visible = false;
+    beacon.ring.visible = false;
+    return;
+  }
+  beacon.beam.visible = true;
+  beacon.ring.visible = true;
+  beacon.beam.position.x = m.target.x;
+  beacon.beam.position.z = m.target.z;
+  beacon.ring.position.x = m.target.x;
+  beacon.ring.position.z = m.target.z;
+  // Pulse the beam so it reads as a live marker.
+  const pulse = 0.3 + Math.sin(G.state.time * 3) * 0.12;
+  beacon.beam.material.opacity = pulse;
+  beacon.ring.scale.setScalar(1 + Math.sin(G.state.time * 3) * 0.08);
+
+  const s = G.state;
+  const px = s.driving && G.car ? G.car.x : G.player.pos.x;
+  const pz = s.driving && G.car ? G.car.z : G.player.pos.z;
+  const d = dist2(px, pz, m.target.x, m.target.z);
+  if (d > m.radius) return;
+  if (m.needsCar && !s.driving) {
+    // Standing at the drop-off on foot does not count — bring the car.
+    if (!G._needsCarToast || G.state.time - G._needsCarToast > 5) {
+      G._needsCarToast = G.state.time;
+      G.hud.toast('Misi ini butuh mobil — bawa mobil ke sini!');
+    }
+    return;
+  }
+  // Mission complete.
+  s.cash = m.rewardCash;
+  s.missionIndex += 1;
+  G.audio.chime();
+  const next = currentMission(G);
+  G.hud.toast(next ? `Misi selesai! Uang $${s.cash} — ${next.title}` : `Semua misi selesai! Uang $${s.cash}`);
+  writeSave(G);
 }

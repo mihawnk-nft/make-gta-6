@@ -1,96 +1,110 @@
-// Pedestrians: townsfolk strolling the sidewalks on short waypoint walks,
-// each a small low-poly figure in a random shirt, bobbing as they go.
+// Pedestrians: 18 walkers strolling the sidewalks. A punched pedestrian
+// falls flat, then gets up somewhere else in the city.
 import * as THREE from 'three';
+import { WORLD } from './config.js';
+import { createRng, pick, range, dist2 } from './rng.js';
 
-const SHIRTS = [0x2ecc71, 0xe74c3c, 0x9b59b6, 0x1abc9c, 0xf39c12, 0xecf0f1, 0xfd79a8];
-const SKINS = [0xc98d64, 0x8d5524, 0xffdbac, 0x6b4226];
+const SHIRTS = [0xe8e8e8, 0x4fae5e, 0xd9a03c, 0x8a5fd0, 0x3d7bd9, 0xd94f3d, 0xe07b39, 0x2b2f36];
 
-export function createPedestrians(scene, rng, count = 18) {
-  const walkers = [];
-  const shirtMat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 });
-  for (let i = 0; i < count; i++) {
-    const figure = new THREE.Group();
-    const shirt = shirtMat(rng.pick(SHIRTS));
-    const skin = new THREE.MeshStandardMaterial({ color: rng.pick(SKINS), roughness: 0.9 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.8, 0.36), shirt);
-    body.position.y = 1.1;
-    body.castShadow = true;
-    figure.add(body);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.4), skin);
-    head.position.y = 1.78;
-    head.castShadow = true;
-    figure.add(head);
-    const legMat = new THREE.MeshStandardMaterial({ color: 0x333a45, roughness: 1 });
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.26), legMat);
-    legL.position.set(-0.16, 0.35, 0);
-    figure.add(legL);
-    const legR = legL.clone();
-    legR.position.x = 0.16;
-    figure.add(legR);
-    scene.add(figure);
-    walkers.push({
-      figure, legL, legR,
-      x: rng.range(-110, 110),
-      z: rng.range(-110, 110),
-      targetX: 0, targetZ: 0,
-      speed: rng.range(1.0, 1.8),
-      phase: rng.range(0, Math.PI * 2),
-      down: 0, // seconds left lying on the ground after being hit
+function makePedMesh(G, shirt) {
+  const group = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({ color: pick(G._rng, [0xe8b98a, 0xc98a5a, 0x8a5a3a, 0xf0c8a0]) });
+  const top = new THREE.MeshStandardMaterial({ color: shirt });
+  const pants = new THREE.MeshStandardMaterial({ color: 0x2e3a55 });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.66, 0.3), top);
+  torso.position.y = 1.05;
+  group.add(torso);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.36), skin);
+  head.position.y = 1.62;
+  group.add(head);
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.66, 0.22), pants);
+  legL.position.set(-0.14, 0.33, 0);
+  group.add(legL);
+  const legR = legL.clone();
+  legR.position.x = 0.14;
+  group.add(legR);
+  G.scene.add(group);
+  return { group, legL, legR };
+}
+
+function randomSidewalkSpot(rng) {
+  const road = pick(rng, WORLD.roads);
+  const along = range(rng, -110, 110);
+  const side = rng() < 0.5 ? -8.5 : 8.5;
+  if (rng() < 0.5) return { x: road + side, z: along, axis: 'z' };
+  return { x: along, z: road + side, axis: 'x' };
+}
+
+export function spawnPedestrians(G) {
+  const rng = createRng(23);
+  G._rng = rng;
+  const peds = [];
+  for (let i = 0; i < 18; i += 1) {
+    const spot = randomSidewalkSpot(rng);
+    const mesh = makePedMesh(G, pick(rng, SHIRTS));
+    mesh.group.position.set(spot.x, 0, spot.z);
+    peds.push({
+      x: spot.x,
+      z: spot.z,
+      axis: spot.axis,
+      dir: rng() < 0.5 ? 1 : -1,
+      speed: range(rng, 1.2, 2.4),
+      down: false,
+      downTimer: 0,
+      phase: rng() * Math.PI * 2,
+      mesh,
     });
   }
+  return peds;
+}
 
-  function pickTarget(w) {
-    // A new nearby sidewalk point: snap to a block edge and walk along it.
-    const bx = Math.round(w.x / 50) * 50;
-    const bz = Math.round(w.z / 50) * 50;
-    if (rng.chance(0.5)) {
-      w.targetX = Math.max(-118, Math.min(118, bx + rng.range(-40, 40)));
-      w.targetZ = bz + rng.pick([-19, 19]);
+export function updatePedestrians(G, dt) {
+  for (const ped of G.peds) {
+    if (ped.down) {
+      ped.downTimer -= dt;
+      ped.mesh.group.rotation.x = -Math.PI / 2; // lying flat
+      if (ped.downTimer <= 0) {
+        // Get up somewhere else in the city.
+        const spot = randomSidewalkSpot(G._rng);
+        ped.x = spot.x;
+        ped.z = spot.z;
+        ped.axis = spot.axis;
+        ped.down = false;
+        ped.mesh.group.rotation.x = 0;
+        ped.mesh.group.position.set(ped.x, 0, ped.z);
+      }
+      continue;
+    }
+    ped.phase += dt * ped.speed * 3;
+    const swing = Math.sin(ped.phase) * 0.4;
+    ped.mesh.legL.rotation.x = swing;
+    ped.mesh.legR.rotation.x = -swing;
+    if (ped.axis === 'z') {
+      ped.z += ped.dir * ped.speed * dt;
+      if (ped.z > 118 || ped.z < -118) ped.dir *= -1;
+      ped.mesh.group.rotation.y = ped.dir > 0 ? 0 : Math.PI;
     } else {
-      w.targetX = bx + rng.pick([-19, 19]);
-      w.targetZ = Math.max(-118, Math.min(118, bz + rng.range(-40, 40)));
+      ped.x += ped.dir * ped.speed * dt;
+      if (ped.x > 118 || ped.x < -118) ped.dir *= -1;
+      ped.mesh.group.rotation.y = ped.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    }
+    ped.mesh.group.position.set(ped.x, 0, ped.z);
+  }
+}
+
+// The nearest pedestrian within range in front of the player (or any
+// direction when range is generous — a punch is a punch).
+export function nearestPed(G, maxDist) {
+  const p = G.player;
+  let best = null;
+  let bestD = maxDist;
+  for (const ped of G.peds) {
+    if (ped.down) continue;
+    const d = dist2(p.pos.x, p.pos.z, ped.x, ped.z);
+    if (d < bestD) {
+      bestD = d;
+      best = ped;
     }
   }
-  for (const w of walkers) pickTarget(w);
-
-  return {
-    walkers,
-    // Knock a walker flat: they lie on the ground for a while, then get
-    // up somewhere else in the city and walk on as if nothing happened.
-    knockDown(walker) {
-      if (!walker || walker.down > 0) return;
-      walker.down = 2.5;
-      walker.figure.rotation.x = -Math.PI / 2;
-    },
-    update(dt) {
-      for (const w of walkers) {
-        if (w.down > 0) {
-          w.down -= dt;
-          if (w.down <= 0) {
-            w.figure.rotation.x = 0;
-            w.x = rng.range(-110, 110);
-            w.z = rng.range(-110, 110);
-            w.figure.position.set(w.x, 0, w.z);
-            pickTarget(w);
-          }
-          continue;
-        }
-        const dx = w.targetX - w.x;
-        const dz = w.targetZ - w.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist < 0.6) { pickTarget(w); continue; }
-        w.x += (dx / dist) * w.speed * dt;
-        w.z += (dz / dist) * w.speed * dt;
-        w.figure.position.set(w.x, 0, w.z);
-        w.figure.rotation.y = Math.atan2(dx, dz);
-        w.phase += dt * w.speed * 4;
-        const swing = Math.sin(w.phase) * 0.4;
-        w.legL.rotation.x = swing;
-        w.legR.rotation.x = -swing;
-      }
-    },
-    positions() {
-      return walkers.map((w) => ({ x: w.x, z: w.z }));
-    },
-  };
+  return best;
 }
