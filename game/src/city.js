@@ -211,7 +211,13 @@ export function buildCity(scene, rng) {
     palm.rotation.y = rng.range(0, Math.PI * 2);
     group.add(palm);
   }
-  for (let z = -120; z <= 120; z += 24) addPalm(BEACH_X - 8, z + rng.range(-4, 4));
+  for (let z = -120; z <= 120; z += 24) {
+    // Keep the mission-1 beacon clear: a palm trunk at (-133, 24) used
+    // to stand exactly on the beacon beam at (-132, 24).
+    let pz = z + rng.range(-4, 4);
+    if (Math.abs(pz - 24) < 8) pz += 12;
+    addPalm(BEACH_X - 8, pz);
+  }
   for (let x = -100; x <= 100; x += 50) { addPalm(x + 8, -56); addPalm(x - 8, 56); }
 
   // --- street lamps on the central avenue ----------------------------------

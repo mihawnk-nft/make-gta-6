@@ -47,7 +47,8 @@ export function createPolice(scene) {
     raiseWanted(level) {
       wanted = Math.min(MAX_WANTED, Math.max(wanted, level));
       cleanTimer = 0;
-      chaseTimer = 0;
+      // A ram raising the heat does NOT erase the chase timer: getting
+      // hit is part of the chase, and the 30 s clock keeps running.
       if (wanted >= 1 && patrol.length === 0) spawnPatrolCar(20, -30);
     },
     // Add stars on top of the current level (hitting someone, long chase).
@@ -125,9 +126,13 @@ export function createPolice(scene) {
         const speed = driving
           ? Math.min(24, 17 + wanted * 2)
           : 9 + wanted * 1.5;
+        // Lose the trail: a patrol car left far behind drops to a
+        // searching cruise, so a fast getaway can actually break away
+        // and the heat can cool off instead of chasing forever.
+        const chaseSpeed = dist > 45 ? speed * 0.55 : speed;
         if (dist > 2.5) {
-          car.x += (dx / dist) * speed * dt;
-          car.z += (dz / dist) * speed * dt;
+          car.x += (dx / dist) * chaseSpeed * dt;
+          car.z += (dz / dist) * chaseSpeed * dt;
           car.mesh.position.set(car.x, 0, car.z);
           car.mesh.rotation.y = Math.atan2(dx, dz);
         }

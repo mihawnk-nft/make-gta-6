@@ -126,5 +126,7 @@ export function createAudio() {
       return muted;
     },
     get isMuted() { return muted; },
+    // 'not-started' until the first user gesture unlocks the context.
+    get state() { return ctx ? ctx.state : 'not-started'; },
   };
 }

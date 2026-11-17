@@ -49,6 +49,9 @@
   #pause-screen { position: fixed; inset: 0; z-index: 10; display: none;
     align-items: center; justify-content: center; background: rgba(0,0,0,.6);
     color: #fff; font-size: 28px; text-align: center; }
+  #pause-screen button { margin-top: 20px; font-size: 18px; font-weight: bold;
+    padding: 10px 28px; border: none; border-radius: 999px; cursor: pointer;
+    background: #ff9f1c; color: #201200; box-shadow: 0 3px 0 #b96a00; }
   #busted-screen { position: fixed; inset: 0; z-index: 11; display: none;
     align-items: center; justify-content: center; flex-direction: column;
     background: rgba(120,0,0,.55); color: #fff; text-align: center; }
@@ -109,7 +112,7 @@
 
 <div id="busted-screen"><h1>BUSTED</h1><p id="busted-text">Polisi menangkapmu. Denda $100.</p></div>
 
-<div id="pause-screen"><div>⏸ JEDA<br><span style="font-size:16px">Tekan Esc untuk lanjut · M untuk bisu</span></div></div>
+<div id="pause-screen"><div>⏸ JEDA<br><span style="font-size:16px">Tekan Esc untuk lanjut · M untuk bisu</span><br><button id="restart-btn">↻ Mulai dari awal</button></div></div>
 
 <script type="module" src="./src/main.js"></script>
 </body>

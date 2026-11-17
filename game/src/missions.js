@@ -42,6 +42,16 @@ export function createMissionLog(onToast) {
       cash -= paid;
       return paid;
     },
+    // Restore an exact save: cash and progress as saved, so a fine paid
+    // before quitting is not silently refunded by a fresh playthrough.
+    restore(savedCash, savedIndex) {
+      if (typeof savedCash === 'number' && Number.isFinite(savedCash)) {
+        cash = Math.max(0, savedCash);
+      }
+      if (typeof savedIndex === 'number' && Number.isFinite(savedIndex)) {
+        index = Math.max(0, Math.min(savedIndex, MISSIONS.length));
+      }
+    },
     target() {
       const mission = MISSIONS[index];
       return mission ? mission.target : null;

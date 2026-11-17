@@ -18,7 +18,7 @@ import { createCombat } from './combat.js';
 import { createMissionLog } from './missions.js';
 import { createHud } from './hud.js';
 import { createAudio } from './audio.js';
-import { loadSave, writeSave } from './save.js';
+import { loadSave, writeSave, clearSave } from './save.js';
 import {
   createInput,
   PRESS_ENTER_CAR, PRESS_JUMP, PRESS_HORN, PRESS_PAUSE, PRESS_MUTE, PRESS_START,
@@ -60,7 +60,7 @@ const saved = loadSave();
 const missions = createMissionLog((message) => hud.showToast(message));
 
 // Read-only handle for Playwright-driven checks (position, cash, wanted).
-window.__sunset = { player, missions, police, traffic, pedestrians, parkedCars, city, driving };
+window.__sunset = { player, missions, police, traffic, pedestrians, parkedCars, city, driving, audio };
 
 // A glowing beacon marks the current mission target in the world, so the
 // player can see where to go without staring at the minimap.
@@ -90,13 +90,20 @@ function moveBeacon() {
 }
 moveBeacon();
 if (saved && typeof saved.missionIndex === 'number') {
-  // Resume: restore cash and progress from the last visit.
-  while (missions.index < saved.missionIndex && missions.current) missions.completeCurrent();
+  // Resume: restore cash, progress and position exactly as saved.
+  if (typeof saved.cash === 'number') missions.restore(saved.cash, saved.missionIndex);
+  else while (missions.index < saved.missionIndex && missions.current) missions.completeCurrent();
+  if (Number.isFinite(saved.playerX) && Number.isFinite(saved.playerZ)) {
+    player.state.x = Math.max(-168, Math.min(128, saved.playerX));
+    player.state.z = Math.max(-128, Math.min(128, saved.playerZ));
+    player.update(0, { x: 0, z: 0 }, false, false, -Math.PI / 2, city.colliders);
+  }
 }
 
 // Camera rig: yaw/pitch orbit, wheel zoom, smoothed follow. While driving
 // the camera becomes a chase camera that follows the car's heading.
 const cam = { yaw: -Math.PI / 2, pitch: 0.32, distance: 9.5 };
+window.__sunset.cam = cam; // live camera yaw for the Playwright driver
 let driveYawOffset = 0; // mouse orbit while driving, decays back to chase
 let screen = 'title'; // title | play | paused
 let elapsed = 0;
@@ -105,6 +112,7 @@ let saveTimer = 0;
 let hitCooldown = 0; // between crash consequences, so one hit counts once
 let bustedActive = false;
 let bustedTimer = 0;
+let prevWanted = 0;
 
 const startScreen = document.getElementById('start-screen');
 const pauseScreen = document.getElementById('pause-screen');
@@ -130,6 +138,12 @@ function startGame() {
 }
 
 startScreen.addEventListener('click', () => { if (screen === 'title') startGame(); });
+
+// Restart from the pause screen: wipe the save and reload fresh.
+document.getElementById('restart-btn').addEventListener('click', () => {
+  clearSave();
+  window.location.reload();
+});
 
 function nearestParkedCarAt(x, z, maxDist) {
   let best = null;
@@ -359,6 +373,12 @@ function step(dt) {
   if (police.busted) startBusted('Polisi menangkapmu.');
   else if (driving.active && driving.car.health <= 0) startBusted('Mobilmu hancur.');
 
+  // The heat cooling off deserves a line: a star fading is good news.
+  if (!bustedActive && police.wanted < prevWanted) {
+    hud.showToast('Polisi kehilangan jejakmu — ★ berkurang.', 3);
+  }
+  prevWanted = police.wanted;
+
   // Autosave every 10 seconds of play.
   saveTimer += dt;
   if (saveTimer > 10) {
@@ -370,13 +390,16 @@ function step(dt) {
   }
 }
 
-// A patrol car ramming the player's car: damage, noise, and heat.
+// A patrol car ramming the player's car: damage and noise — but no extra
+// star. Being rammed is a consequence of being wanted, not a new crime,
+// and a star per ram used to mask the 30 s chase timer completely: four
+// rams raised wanted 1 -> 5 in ~13 s of game time, before the timer
+// could ever fire. Stars now rise from crimes and from long chases.
 police.setRamHandler(() => {
   if (!driving.active) return;
-  driving.damage(14);
-  police.addWanted(1);
+  driving.damage(8);
   audio.crash();
-  hud.showToast('Polisi menabrak mobilmu! +1 ★', 2.5);
+  hud.showToast('Polisi menabrak mobilmu!', 2.5);
 });
 
 function placeCamera(snap) {
