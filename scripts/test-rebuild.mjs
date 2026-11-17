@@ -165,9 +165,13 @@ browser = await chromium.launch({
   const st = await ev(page, () => ({ cash: window.__game.state.cash, wanted: window.__game.state.wanted, mission: window.__game.state.missionIndex, x: window.__game.player.pos.x, z: window.__game.player.pos.z }));
   report('T6 BUSTED -> fine $100, wanted 0, respawn', busted && st.cash === 150 && st.wanted === 0 && Math.abs(st.x) < 1 && Math.abs(st.z - 100) < 1,
     `cash=${st.cash} wanted=${st.wanted} pos=(${st.x.toFixed(1)},${st.z.toFixed(1)}) mission=${st.mission}`);
-  await page.click('#busted-btn');
-  const resumed = await waitFor(page, () => window.__game.state.screen === 'play', 10000, 'resume after busted');
-  report('T6 continue after BUSTED', resumed, '');
+  if (busted) {
+    await page.click('#busted-btn');
+    const resumed = await waitFor(page, () => window.__game.state.screen === 'play', 10000, 'resume after busted');
+    report('T6 continue after BUSTED', resumed, '');
+  } else {
+    report('T6 continue after BUSTED', false, 'never busted, nothing to resume');
+  }
   report('T6 no console errors', page.__errors.length === 0, page.__errors.slice(0, 2).join(' | '));
   await page.__ctx.close();
 }
@@ -216,46 +220,37 @@ browser = await chromium.launch({
 }
 
 // ---------- T7: wanted timers (slow — small viewport for speed) ----------
-// Chase phase: flee in a stolen car (teleport away if a cop gets too close,
-// so the corner-bust never triggers). Then keep fleeing: once the nearest
-// cop is >45u the hidden timer runs and a star drops after 20s.
+// On foot: dodge the cop (jump clear whenever it gets within 8u, so the
+// corner-bust never triggers) while the chase timer runs; then keep jumping
+// clear whenever a cop gets within 50u, so the hidden timer can drop a star.
 {
   const page = await newPage(800, 450);
-  const parked = await ev(page, () => { const c = window.__game.parkedCars[0]; return { x: c.x, z: c.z }; });
-  await ev(page, (p) => window.__game.teleport(p.x + 2, p.z), parked);
-  await page.waitForTimeout(300);
-  await page.keyboard.press('KeyE');
-  await waitFor(page, () => window.__game.state.driving === true, 10000, 'enter car for T7');
   await ev(page, () => window.__game.setWanted(1));
-  await page.keyboard.down('KeyW');
-  // Flee driver: steer away from the nearest cop, teleport clear if cornered.
-  const flee = async () => {
-    await ev(page, () => {
+  const dodge = async (minDist, jump) => {
+    await ev(page, (cfg) => {
       const g = window.__game;
-      if (!g.G.car) return;
-      const cops = g.police;
-      if (!cops.length) return;
-      let near = cops[0];
+      const p = g.player.pos;
+      if (!g.police.length) return;
+      let near = g.police[0];
       let nd = Infinity;
-      for (const c of cops) {
-        const d = Math.hypot(c.x - g.G.car.x, c.z - g.G.car.z);
+      for (const c of g.police) {
+        const d = Math.hypot(c.x - p.x, c.z - p.z);
         if (d < nd) { nd = d; near = c; }
       }
-      if (nd < 25) {
-        // Jump clear: 70u away from the cop, clamped into the world.
-        const ax = g.G.car.x - near.x;
-        const az = g.G.car.z - near.z;
+      if (nd < cfg.minDist) {
+        const ax = p.x - near.x;
+        const az = p.z - near.z;
         const len = Math.hypot(ax, az) || 1;
-        g.G.car.x = Math.max(-160, Math.min(125, g.G.car.x + (ax / len) * 70));
-        g.G.car.z = Math.max(-125, Math.min(125, g.G.car.z + (az / len) * 70));
-      } else {
-        g.G.car.angle = Math.atan2(g.G.car.x - near.x, g.G.car.z - near.z);
+        g.teleport(
+          Math.max(-160, Math.min(125, p.x + (ax / len) * cfg.jump)),
+          Math.max(-125, Math.min(125, p.z + (az / len) * cfg.jump)),
+        );
       }
-    });
+    }, { minDist, jump });
   };
   let up = false;
   for (let i = 0; i < 200; i += 1) {
-    await flee();
+    await dodge(8, 20);
     up = await ev(page, () => window.__game.state.wanted >= 2);
     if (up) break;
     await page.waitForTimeout(800);
@@ -263,12 +258,11 @@ browser = await chromium.launch({
   report('T7 chase 30s -> wanted rises', up, await ev(page, () => `wanted=${window.__game.state.wanted} chaseTimer=${window.__game.state.chaseTimer.toFixed(1)}`));
   let down = false;
   for (let i = 0; i < 240; i += 1) {
-    await flee();
+    await dodge(50, 70);
     down = await ev(page, () => window.__game.state.wanted <= 1);
     if (down) break;
     await page.waitForTimeout(800);
   }
-  await page.keyboard.up('KeyW');
   report('T7 hidden 20s -> wanted drops', down, await ev(page, () => `wanted=${window.__game.state.wanted} hiddenTimer=${window.__game.state.hiddenTimer.toFixed(1)}`));
   report('T7 no console errors', page.__errors.length === 0, page.__errors.slice(0, 2).join(' | '));
   await page.__ctx.close();

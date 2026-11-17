@@ -109,27 +109,28 @@ export function updatePolice(G, dt) {
   }
   G.audio.siren(true);
 
-  // Timers: a chase that drags on adds a star; staying unseen drops one.
-  s.chaseTimer += dt;
-  if (s.chaseTimer >= POLICE_TUNE.chaseStarSeconds) {
-    s.chaseTimer = 0;
-    if (s.wanted < MAX_WANTED) {
-      s.wanted = Math.min(MAX_WANTED, s.wanted + 1);
-      G.hud.toast(`Kejar-kejaran berlanjut — Wanted naik ke ${s.wanted} ★`);
-    }
-  }
+  // Timers: the chase must stay close to add a star; once the nearest cop
+  // is beyond the lost range the chase is broken and hiding drops a star.
   let nearest = Infinity;
   for (const cop of police) nearest = Math.min(nearest, dist2(cop.x, cop.z, target.x, target.z));
   if (nearest > POLICE_TUNE.lostRange) {
+    s.chaseTimer = 0;
     s.hiddenTimer += dt;
     if (s.hiddenTimer >= POLICE_TUNE.hiddenStarSeconds) {
       s.hiddenTimer = 0;
       s.wanted = Math.max(0, s.wanted - 1);
-      s.chaseTimer = 0;
       G.hud.toast(`Kamu lolos — Wanted turun ke ${s.wanted} ★`);
     }
   } else {
     s.hiddenTimer = 0;
+    s.chaseTimer += dt;
+    if (s.chaseTimer >= POLICE_TUNE.chaseStarSeconds) {
+      s.chaseTimer = 0;
+      if (s.wanted < MAX_WANTED) {
+        s.wanted = Math.min(MAX_WANTED, s.wanted + 1);
+        G.hud.toast(`Kejar-kejaran berlanjut — Wanted naik ke ${s.wanted} ★`);
+      }
+    }
   }
 
   // Chase steering + ramming.
@@ -137,9 +138,13 @@ export function updatePolice(G, dt) {
   for (const cop of police) {
     const d = dist2(cop.x, cop.z, target.x, target.z);
     const lost = d > POLICE_TUNE.lostRange;
-    const maxSpeed = POLICE_TUNE.maxSpeed * (lost ? POLICE_TUNE.lostSpeedFactor : 1);
+    let maxSpeed = POLICE_TUNE.maxSpeed * (lost ? POLICE_TUNE.lostSpeedFactor : 1);
+    // Slow down and turn sharply when close, or the car orbits the player
+    // at its turning radius and can never corner them.
+    if (d < 15) maxSpeed = Math.min(maxSpeed, Math.max(6, 8 + d * 0.9));
     const wantAngle = Math.atan2(target.x - cop.x, target.z - cop.z);
-    cop.angle += angleDiff(cop.angle, wantAngle) * Math.min(1, dt * 2.6);
+    const turnRate = d < 15 ? 6 : 2.6;
+    cop.angle += angleDiff(cop.angle, wantAngle) * Math.min(1, dt * turnRate);
     cop.speed = Math.min(maxSpeed, cop.speed + POLICE_TUNE.accel * dt);
     cop.x += Math.sin(cop.angle) * cop.speed * dt;
     cop.z += Math.cos(cop.angle) * cop.speed * dt;
