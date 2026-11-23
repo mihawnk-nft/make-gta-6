@@ -158,14 +158,16 @@ export function spawnParkedCars(G) {
   const cars = [];
   for (let i = 0; i < spots.length; i += 1) {
     const spot = spots[i];
-    // The first spot always holds a supercar, so the city never lacks one;
-    // the rest mix street cars with sports, muscle and limo sightings.
+    // The last spot always holds a supercar, so the city never lacks one;
+    // the first spots stay street-level, so a Rank 1 player can always
+    // steal the nearest parked car (parkedCars[0] is never a supercar).
+    // The rest mix street cars with sports, muscle and limo sightings.
     let style = 'sedan';
     let name = pick(rng, CAR_NAMES);
-    if (i === 0) {
+    if (i === spots.length - 1) {
       style = 'supercar';
       name = pick(rng, LUXURY_NAMES.supercar);
-    } else {
+    } else if (i !== 0) {
       const roll = rng();
       if (roll < 0.18) { style = 'sports'; name = pick(rng, LUXURY_NAMES.sports); }
       else if (roll < 0.32) { style = 'muscle'; name = pick(rng, LUXURY_NAMES.muscle); }
