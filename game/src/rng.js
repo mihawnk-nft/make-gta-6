@@ -34,3 +34,16 @@ export function angleDiff(a, b) {
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
 }
+
+// Fisher-Yates shuffle driven by a seeded rng (round 3: used by the
+// garage delivery order and the side-job district rotation).
+export function shuffle(rng, arr) {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = out[i];
+    out[i] = out[j];
+    out[j] = tmp;
+  }
+  return out;
+}

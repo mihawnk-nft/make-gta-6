@@ -4,7 +4,7 @@
 import { WORLD } from './config.js';
 import { createRng, pick, range, dist2, angleDiff } from './rng.js';
 import { makeCar, syncCarMesh } from './vehicles.js';
-import { CAR_NAMES, CAR_COLORS } from './config.js';
+import { CAR_NAMES, CAR_COLORS, LUXURY_NAMES } from './config.js';
 
 function loopWaypoints(bx, bz) {
   // Rectangle on the four roads around block (bx, bz), driven clockwise
@@ -34,9 +34,17 @@ export function spawnTraffic(G) {
     const t = rng();
     const x = wp.x + (next.x - wp.x) * t;
     const z = wp.z + (next.z - wp.z) * t;
+    const styleRoll = rng();
+    const tStyle = styleRoll < 0.2 ? 'sports' : styleRoll < 0.35 ? 'muscle' : 'sedan';
+    const tName = tStyle === 'sports' ? pick(rng, LUXURY_NAMES.sports)
+      : tStyle === 'muscle' ? pick(rng, LUXURY_NAMES.muscle)
+      : pick(rng, CAR_NAMES);
     const car = makeCar(G, {
       kind: 'traffic',
-      name: pick(rng, CAR_NAMES),
+      // Traffic mixes in street-level luxury: sports and muscle cars that
+      // any rank can steal (limo and supercar stay parked for Rank 2).
+      style: tStyle,
+      name: tName,
       color: pick(rng, CAR_COLORS),
       x,
       z,

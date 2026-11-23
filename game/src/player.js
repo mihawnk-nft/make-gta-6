@@ -82,7 +82,9 @@ export function updatePlayer(G, dt) {
   if (input.held.right) { mx += Math.cos(yaw); mz += -Math.sin(yaw); }
   const len = Math.hypot(mx, mz);
   const running = input.held.run;
-  const targetSpeed = len > 0 ? (running ? PLAYER_TUNE.runSpeed : PLAYER_TUNE.walkSpeed) : 0;
+  // Round 3: aiming (right mouse button) slows Mara to a careful walk.
+  const aiming = input.aiming;
+  const targetSpeed = len > 0 ? (running ? PLAYER_TUNE.runSpeed : PLAYER_TUNE.walkSpeed) * (aiming ? 0.45 : 1) : 0;
   if (len > 0) {
     mx /= len;
     mz /= len;

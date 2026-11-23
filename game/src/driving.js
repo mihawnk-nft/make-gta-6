@@ -56,6 +56,10 @@ export function updateDriving(G, dt) {
   const car = G.car;
   if (!car || !G.state.driving) return;
   const input = G.input;
+  // Luxury cars carry their own top speed and steering; ordinary cars
+  // fall back to the shared tuning.
+  const topSpeed = car.maxSpeed ?? CAR_TUNE.maxSpeed;
+  const steerTune = car.steer ?? CAR_TUNE.steer;
 
   if (input.held.up) car.speed += CAR_TUNE.accel * dt;
   else if (input.held.down) {
@@ -66,10 +70,10 @@ export function updateDriving(G, dt) {
     car.speed -= car.speed * 1.4 * dt;
     if (Math.abs(car.speed) < 0.3) car.speed = 0;
   }
-  car.speed = clamp(car.speed, -CAR_TUNE.maxReverse, CAR_TUNE.maxSpeed);
+  car.speed = clamp(car.speed, -CAR_TUNE.maxReverse, topSpeed);
 
   const steerInput = (input.held.left ? 1 : 0) - (input.held.right ? 1 : 0);
-  const steerAmount = steerInput * CAR_TUNE.steer * dt * clamp(Math.abs(car.speed) / 8, 0, 1);
+  const steerAmount = steerInput * steerTune * dt * clamp(Math.abs(car.speed) / 8, 0, 1);
   car.angle += steerAmount * Math.sign(car.speed || 1);
 
   let nx = car.x + Math.sin(car.angle) * car.speed * dt;
@@ -94,7 +98,7 @@ export function updateDriving(G, dt) {
     }
   }
   syncCarMesh(car);
-  G.audio.engine(true, Math.abs(car.speed) / CAR_TUNE.maxSpeed);
+  G.audio.engine(true, Math.abs(car.speed) / topSpeed);
 
   // Busted when the car is totalled.
   if (car.condition <= 0) {

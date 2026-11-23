@@ -10,6 +10,17 @@ export function createAudio() {
   let sirenTimer = null;
   let started = false;
   let sirenOn = false;
+  let radioTimer = null;
+  let radioStation = '';
+  let radioStep = 0;
+
+  // Tiny generative loops, one per station: Sunset FM is a slow mellow
+  // arpeggio, Turbo FM a fast square bass, Neon Nights a synthwave lead.
+  const RADIO_PATTERNS = {
+    'Sunset FM': { stepMs: 340, notes: [220, 277, 330, 392, 330, 277], type: 'sine', vol: 0.07 },
+    'Turbo FM': { stepMs: 150, notes: [110, 110, 165, 110, 131, 98, 110, 147], type: 'square', vol: 0.05 },
+    'Neon Nights': { stepMs: 220, notes: [196, 246, 294, 392, 294, 246, 220, 175], type: 'sawtooth', vol: 0.05 },
+  };
 
   function ensure() {
     if (ctx) return true;
@@ -85,6 +96,32 @@ export function createAudio() {
       setTimeout(() => tone(165, 0.5, 'sawtooth', 0.2, 82), 260);
     },
     crash() { noise(0.3, 0.45, 500); tone(70, 0.25, 'sine', 0.4, 35); },
+    shot() { noise(0.12, 0.5, 2400); tone(160, 0.1, 'square', 0.22, 60); },
+    explosion() {
+      noise(0.7, 0.6, 320);
+      tone(60, 0.6, 'sine', 0.5, 28);
+      setTimeout(() => noise(0.4, 0.3, 200), 120);
+    },
+    phoneBeep() { tone(880, 0.08, 'sine', 0.14); setTimeout(() => tone(1174, 0.1, 'sine', 0.14), 90); },
+    // Start (or stop, with '') a radio station's generative loop.
+    radio(name) {
+      if (radioTimer) {
+        clearInterval(radioTimer);
+        radioTimer = null;
+      }
+      radioStation = name || '';
+      radioStep = 0;
+      if (!radioStation) return;
+      const pattern = RADIO_PATTERNS[radioStation];
+      if (!pattern) return;
+      radioTimer = setInterval(() => {
+        if (!ctx || !pattern) return;
+        const note = pattern.notes[radioStep % pattern.notes.length];
+        radioStep += 1;
+        tone(note, pattern.stepMs / 1000 * 0.9, pattern.type, pattern.vol);
+      }, pattern.stepMs);
+    },
+    get radioStation() { return radioStation; },
     engine(on, speedNorm) {
       if (!ctx) return;
       if (on && !engineOsc) {

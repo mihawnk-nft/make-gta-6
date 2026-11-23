@@ -1,19 +1,47 @@
 // Cars: mesh factory + parked-car spawns. A car is a low-poly body, cabin,
 // four spinning wheels and headlights; police cars add a light bar.
+// Luxury styles change the silhouette: the supercar is low and wide with
+// a spoiler, the limo is long, the muscle car gets a hood scoop.
 import * as THREE from 'three';
-import { CAR_NAMES, CAR_COLORS, WORLD } from './config.js';
+import { CAR_NAMES, CAR_COLORS, WORLD, CAR_STYLES, LUXURY_NAMES } from './config.js';
 import { createRng, pick, range } from './rng.js';
 
-export function createCarMesh(color, isPolice) {
+export function createCarMesh(color, isPolice, style) {
   const group = new THREE.Group();
   const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.45 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.62, 4.4), bodyMat);
-  body.position.y = 0.62;
+  const isSuper = style === 'supercar';
+  const isLimo = style === 'limo';
+  const isMuscle = style === 'muscle';
+  const bodyLen = isLimo ? 6.4 : isSuper ? 4.2 : 4.4;
+  const bodyH = isSuper ? 0.5 : 0.62;
+  const bodyW = isSuper ? 2.2 : 2.0;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyLen), bodyMat);
+  body.position.y = isSuper ? 0.55 : 0.62;
+  body.castShadow = true;
   group.add(body);
   const cabinMat = new THREE.MeshStandardMaterial({ color: 0x1c2733, metalness: 0.6, roughness: 0.25 });
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 2.2), cabinMat);
-  cabin.position.set(0, 1.18, -0.25);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(isSuper ? 1.5 : 1.7, isSuper ? 0.45 : 0.55, isLimo ? 2.6 : 2.2), cabinMat);
+  cabin.position.set(0, isSuper ? 1.0 : 1.18, isLimo ? -0.5 : -0.25);
+  cabin.castShadow = true;
   group.add(cabin);
+  if (isSuper) {
+    // Rear spoiler on two small struts.
+    const spoilerMat = new THREE.MeshStandardMaterial({ color: 0x14161a, metalness: 0.6, roughness: 0.3 });
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.5), spoilerMat);
+    wing.position.set(0, 1.05, -2.0);
+    group.add(wing);
+    for (const sx of [-0.7, 0.7]) {
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, 0.1), spoilerMat);
+      strut.position.set(sx, 0.85, -2.0);
+      group.add(strut);
+    }
+  }
+  if (isMuscle) {
+    // Hood scoop.
+    const scoop = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.22, 1.0), bodyMat);
+    scoop.position.set(0, 1.0, 1.3);
+    group.add(scoop);
+  }
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x14161a });
   const wheels = [];
   for (const [wx, wz] of [[-0.95, 1.45], [0.95, 1.45], [-0.95, -1.45], [0.95, -1.45]]) {
@@ -54,7 +82,9 @@ export function createCarMesh(color, isPolice) {
 }
 
 export function makeCar(G, opts) {
-  const mesh = createCarMesh(opts.color, !!opts.isPolice);
+  const style = opts.style || 'sedan';
+  const tune = CAR_STYLES[style] || CAR_STYLES.sedan;
+  const mesh = createCarMesh(opts.color, !!opts.isPolice, style);
   mesh.group.position.set(opts.x, 0, opts.z);
   mesh.group.rotation.y = opts.angle || 0;
   G.scene.add(mesh.group);
@@ -62,6 +92,11 @@ export function makeCar(G, opts) {
     kind: opts.kind || 'parked', // parked | traffic | police | player
     name: opts.name || 'Mobil',
     color: opts.color,
+    style,
+    maxSpeed: opts.maxSpeed ?? tune.maxSpeed,
+    steer: opts.steer ?? tune.steer,
+    value: opts.value ?? tune.value,
+    minRank: opts.minRank ?? tune.minRank,
     x: opts.x,
     z: opts.z,
     angle: opts.angle || 0,
@@ -121,10 +156,23 @@ export function spawnParkedCars(G) {
     spots.push({ x, z, angle });
   }
   const cars = [];
-  for (const spot of spots) {
-    const name = pick(rng, CAR_NAMES);
+  for (let i = 0; i < spots.length; i += 1) {
+    const spot = spots[i];
+    // The first spot always holds a supercar, so the city never lacks one;
+    // the rest mix street cars with sports, muscle and limo sightings.
+    let style = 'sedan';
+    let name = pick(rng, CAR_NAMES);
+    if (i === 0) {
+      style = 'supercar';
+      name = pick(rng, LUXURY_NAMES.supercar);
+    } else {
+      const roll = rng();
+      if (roll < 0.18) { style = 'sports'; name = pick(rng, LUXURY_NAMES.sports); }
+      else if (roll < 0.32) { style = 'muscle'; name = pick(rng, LUXURY_NAMES.muscle); }
+      else if (roll < 0.4) { style = 'limo'; name = pick(rng, LUXURY_NAMES.limo); }
+    }
     const color = pick(rng, CAR_COLORS);
-    cars.push(makeCar(G, { kind: 'parked', name, color, x: spot.x, z: spot.z, angle: spot.angle }));
+    cars.push(makeCar(G, { kind: 'parked', style, name, color, x: spot.x, z: spot.z, angle: spot.angle }));
   }
   return cars;
 }

@@ -51,6 +51,7 @@ export function spawnPedestrians(G) {
       speed: range(rng, 1.2, 2.4),
       down: false,
       downTimer: 0,
+      waitTimer: 0,
       phase: rng() * Math.PI * 2,
       mesh,
     });
@@ -73,6 +74,18 @@ export function updatePedestrians(G, dt) {
         ped.mesh.group.rotation.x = 0;
         ped.mesh.group.position.set(ped.x, 0, ped.z);
       }
+      continue;
+    }
+    // Round 3: walkers sometimes pause to look at the sunset, so the
+    // sidewalk never reads like a conveyor belt.
+    if (ped.waitTimer > 0) {
+      ped.waitTimer -= dt;
+      ped.mesh.legL.rotation.x = 0;
+      ped.mesh.legR.rotation.x = 0;
+      continue;
+    }
+    if (G._rng() < dt * 0.02) {
+      ped.waitTimer = 1 + G._rng() * 2;
       continue;
     }
     ped.phase += dt * ped.speed * 3;

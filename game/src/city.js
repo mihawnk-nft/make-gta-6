@@ -34,10 +34,21 @@ export function buildCity(G) {
   scene.background = new THREE.Color(0xff9e5e);
   scene.fog = new THREE.Fog(0xf2a06b, 90, 320);
 
-  const hemi = new THREE.HemisphereLight(0xffd9a0, 0x5a4a6a, 0.85);
+  const hemi = new THREE.HemisphereLight(0xffd9a0, 0x5a4a6a, 0.9);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffb45e, 2.1);
+  const sun = new THREE.DirectionalLight(0xffa54e, 2.4);
   sun.position.set(-120, 70, 60);
+  // Crisp golden-hour shadows: a 1024 map over the whole downtown, tuned
+  // tight enough that building edges stay sharp under SwiftShader.
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -170;
+  sun.shadow.camera.right = 140;
+  sun.shadow.camera.top = 140;
+  sun.shadow.camera.bottom = -140;
+  sun.shadow.camera.near = 10;
+  sun.shadow.camera.far = 420;
+  sun.shadow.bias = -0.0006;
   scene.add(sun);
   const fill = new THREE.DirectionalLight(0x8fb4ff, 0.35);
   fill.position.set(80, 40, -80);
@@ -53,12 +64,14 @@ export function buildCity(G) {
   scene.add(sunDisc);
 
   // Ground: grass-ish city base, then roads, sidewalks, sand and sea.
+  // The ground catches the long golden-hour shadows.
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(340, 340),
-    new THREE.MeshStandardMaterial({ color: 0x6f7f5a }),
+    new THREE.MeshStandardMaterial({ color: 0x6f7f5a, roughness: 0.95, metalness: 0 }),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(-15, -0.05, 0);
+  ground.receiveShadow = true;
   scene.add(ground);
 
   const roadMat = new THREE.MeshStandardMaterial({ color: 0x2e3138 });
@@ -140,9 +153,11 @@ export function buildCity(G) {
         const cz = bz + oz + range(rng, -1, 1);
         const tex = textures[texIndex % textures.length];
         texIndex += 1;
-        const mat = new THREE.MeshStandardMaterial({ map: tex });
+        const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0.05 });
         const building = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
         building.position.set(cx, h / 2, cz);
+        building.castShadow = true;
+        building.receiveShadow = true;
         scene.add(building);
         // Flat roof cap, slightly darker.
         const roof = new THREE.Mesh(
@@ -169,9 +184,11 @@ export function buildCity(G) {
   const towerTex = windowTexture(rng, '#7a6a8a', 0.6);
   const tower = new THREE.Mesh(
     new THREE.BoxGeometry(20, 68, 20),
-    new THREE.MeshStandardMaterial({ map: towerTex }),
+    new THREE.MeshStandardMaterial({ map: towerTex, roughness: 0.8, metalness: 0.1 }),
   );
   tower.position.set(0, 34, 0);
+  tower.castShadow = true;
+  tower.receiveShadow = true;
   scene.add(tower);
   colliders.push({ minX: -10, maxX: 10, minZ: -10, maxZ: 10, top: 68 });
   const spire = new THREE.Mesh(

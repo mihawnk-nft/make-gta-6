@@ -1,9 +1,11 @@
-// Missions: three chained jobs for Mara Voss. Each target is marked by a
-// tall yellow light beam in the world and a star on the minimap. Rewards
-// set the cash to the exact spec amounts ($400 / $700 / $1200).
+// Missions: ten chained jobs for Mara Voss in three acts. Each target is
+// marked by a tall yellow light beam in the world and a star on the
+// minimap. Rewards set the cash to the exact spec amounts ($400 … $10000)
+// and pay +100 RP each.
 import * as THREE from 'three';
-import { MISSIONS } from './config.js';
+import { MISSIONS, ACTS } from './config.js';
 import { dist2 } from './rng.js';
+import { addRp } from './rank.js';
 import { writeSave } from './save.js';
 
 export function createMissions(G) {
@@ -31,6 +33,21 @@ export function createMissions(G) {
 export function currentMission(G) {
   const idx = G.state.missionIndex;
   return idx < MISSIONS.length ? MISSIONS[idx] : null;
+}
+
+export function missionAct(G) {
+  const m = currentMission(G);
+  if (!m) return { act: 3, name: 'Menuju Bebas' };
+  const found = ACTS.find((a) => m.id >= a.from && m.id <= a.to);
+  return found || { act: 1, name: 'Utang Senja' };
+}
+
+// "Babak 1 · Misi 1/10 — Utang Senja" (or "BEBAS" when the chain is done).
+export function missionActText(G) {
+  const m = currentMission(G);
+  if (!m) return 'BEBAS — SEMUA MISI SELESAI';
+  const a = missionAct(G);
+  return `Babak ${a.act} · Misi ${m.id}/10 — ${a.name}`;
 }
 
 export function missionTitle(G) {
@@ -75,11 +92,12 @@ export function updateMissions(G, dt) {
     }
     return;
   }
-  // Mission complete.
+  // Mission complete: exact cash, +100 RP, next job (or freedom).
   s.cash = m.rewardCash;
   s.missionIndex += 1;
+  addRp(G, m.rewardRp);
   G.audio.chime();
   const next = currentMission(G);
-  G.hud.toast(next ? `Misi selesai! Uang $${s.cash} — ${next.title}` : `Semua misi selesai! Uang $${s.cash}`);
+  G.hud.toast(next ? `Misi selesai! Uang $${s.cash} — ${next.title}` : `Semua misi selesai! Uang $${s.cash} — BEBAS!`);
   writeSave(G);
 }

@@ -29,18 +29,54 @@ golden hour. Start with $250, 100 health and 0 wanted stars.
   seconds unseen drops one. Get cornered for 2.5 s or total your car and
   you're BUSTED: $100 fine, respawn on foot, missions continue.
 - **Combat:** F punches (a pedestrian falls flat, then gets up elsewhere);
-  H honks the horn.
-- **Missions (3, chained):** follow the yellow light beacon and the minimap
-  star — (1) run to the pier ($400), (2) steal a car and bring it to the
-  east workshop ($700), (3) deliver it to the north-west drop-off ($1200).
-- **HUD & minimap:** cash, wanted stars, health, mission banner, clock,
-  speed + car condition while driving, and a live 2D minimap (you, traffic,
-  pedestrians, police, mission target).
-- **Save:** cash, mission, health, wanted and your exact position persist in
-  localStorage and restore after a reload. Esc pauses; "Mulai dari awal"
-  wipes the save.
+  H honks the horn. Round 3 adds a full arsenal: 8 weapons on the wheel
+  (fists, pistol, SMG, shotgun, rifle, sniper, RPG, molotov) — left click
+  shoots, right click aims, Q cycles, 1–8 select, Tab opens the wheel,
+  R reloads. Higher ranks unlock the heavier guns.
+- **Missions (10, chained, 3 acts):** follow the yellow light beacon and the
+  minimap star — Act 1 "Utang Senja" (pier run $400, steal a car to the east
+  workshop $700, north-west delivery $1200), Act 2 "Jalan Panas" ($1800 /
+  $2500 / $3400), Act 3 "Menuju Bebas" ($4500 / $6000 / $7500 / $10000).
+  Every mission pays +100 RP on top of the cash.
+- **Police, escalated:** at 3 stars the Air-1 helicopter shadows you from
+  above; at 4–5 stars roadblocks close the avenues. Both stand down below
+  3 stars.
+- **Cheat codes (type them anywhere while playing):** DUITBANYAK +$5000,
+  SEHATSELALU full health + armour, BEBASPOLISI wanted 0, SENJATALENGKAP
+  every weapon + RPG in hand, MOBILMEWAH a supercar nearby. The full list
+  is on the start and pause screens, and in the phone's Texts tab.
+- **Luxury cars:** sports, muscle, limo and supercar sightings in traffic
+  and parking — each with its own top speed, steering and value (the
+  supercar does 38 and is worth $85,000). Limo and supercar need Rank 2.
+- **Districts & standing:** seven named neighbourhoods (Pantai Sunset,
+  Dermaga, Kota Tua, Pelabuhan, Pusat Kota, Marina, Bukit Timur), each with
+  a WARY / NEUTRAL / FRIENDLY standing starting at 30. A blue-beacon side
+  job in a district pays +$150, +25 RP and +20 standing there.
+- **Crew:** Dex (Z) talks a cop down one star, Maya (X) repairs your car to
+  100%, Rex (C) sends a getaway car — each with a cooldown and loyalty.
+  Rex joins at Rank 2.
+- **MaraPhone (P):** Jobs, Crew, Map, Bank, Garage and Texts in one place.
+  The garage delivers your stolen cars back to your side.
+- **Rank & RP:** Rank 1 Pemula (0 RP), Rank 2 Jalanan (300 RP), Rank 3
+  Legenda Senja (800 RP). Ranks unlock weapons and luxury cars.
+- **Radio (R):** Sunset FM, Turbo FM and Neon Nights, then off — each with
+  its own generative WebAudio loop, shown in the HUD as "♪ …".
+- **HUD & minimap:** cash, wanted stars, health + armour, mission card with
+  act and number, clock, rank, district + standing, side job, radio, heli
+  badge, weapon wheel, speed + car value and condition while driving, and a
+  live 2D minimap (you, traffic, pedestrians, police, heli, roadblocks,
+  mission target, side-job beacon). Click the minimap to drop a waypoint;
+  a compass shows your heading.
+- **Save:** cash, mission, health, armour, wanted, RP, district standing,
+  side-job stats, weapon and your exact position persist in localStorage
+  (3 slots from the pause menu) and restore after a reload. Esc pauses;
+  "Mulai dari awal" wipes the save.
 - **Sound:** all audio is synthesized with WebAudio (engine hum, siren,
-  thud, horn, mission chime) — no audio files, no network requests.
+  thud, horn, gunshots, explosions, radio loops, mission chime) — no audio
+  files, no network requests.
+- **Graphics (HD):** antialiasing, device pixel ratio up to 2, soft shadow
+  mapping from the low golden-hour sun, ACES filmic tone mapping, richer
+  materials — kept light enough to stay playable.
 
 ## Tech
 
@@ -49,7 +85,8 @@ golden hour. Start with $250, 100 health and 0 wanted stars.
   per system: `main.js` (bootstrap + loop), `city.js`, `player.js`,
   `vehicles.js`, `traffic.js`, `pedestrians.js`, `driving.js`, `police.js`,
   `missions.js`, `combat.js`, `hud.js`, `audio.js`, `save.js`, `input.js`,
-  plus `rng.js` / `config.js` utilities.
+  plus `rng.js` / `config.js` utilities. Round 3 adds `rank.js`, `districts.js`,
+  `sidejob.js`, `crew.js`, `cheats.js` and `phone.js`.
 - The city is procedural and deterministic (seed 7): a 5×5 block grid with
   taller, denser buildings downtown, lit windows, street lamps, palms on
   the beachfront, sand + sea to the west, a warm sun, dusk fog and clouds.

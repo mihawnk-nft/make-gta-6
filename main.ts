@@ -6,6 +6,10 @@
 // /output/dossier.json, the summary the judge reads, with the vendored
 // make.fun library.
 //
+// Round 3: the hand-in now covers the expanded game — 10 missions in
+// 3 acts, crew, phone, radio, districts and side jobs, 8 weapons, cheats
+// and luxury cars — all still plain static files under game/.
+//
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts

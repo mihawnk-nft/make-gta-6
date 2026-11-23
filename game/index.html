@@ -17,14 +17,24 @@
   #hud-health { margin-top: 6px; width: 170px; height: 14px; background: rgba(0,0,0,.55);
     border: 1px solid rgba(255,255,255,.5); border-radius: 7px; overflow: hidden; }
   #hud-health-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#37d67a,#7dff8a); }
-  #hud-health-text { font-size: 12px; opacity: .9; }
+  #hud-armor { margin-top: 4px; width: 170px; height: 10px; background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.5); border-radius: 5px; overflow: hidden; }
+  #hud-armor-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#3d7bd9,#7fc4ff); }
+  #hud-health-text, #hud-armor-text { font-size: 12px; opacity: .9; }
+  #hud-rank { margin-top: 6px; font-size: 13px; font-weight: 700; color: #ffd23c; }
   #hud-top-right { position: absolute; top: 14px; right: 16px; text-align: right; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
   #hud-clock { font-size: 26px; font-weight: 700; }
   #hud-date { font-size: 12px; opacity: .85; }
+  #hud-radio { font-size: 13px; margin-top: 4px; color: #ffb3e6; }
+  #hud-heli { font-size: 13px; margin-top: 2px; color: #ff9a3c; font-weight: 700; }
+  #hud-compass { font-size: 13px; margin-top: 2px; opacity: .9; }
   #hud-mission-wrap { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
     text-align: center; max-width: 520px; }
+  #hud-act { font-size: 13px; font-weight: 700; color: #ffb3e6; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
   #hud-mission { font-size: 20px; font-weight: 800; color: #ffd23c; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
   #hud-mission-text { font-size: 13px; opacity: .95; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+  #hud-district-text { font-size: 13px; margin-top: 3px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+  #hud-sidejob { font-size: 12px; margin-top: 2px; color: #7fc4ff; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
   #hud-speed { position: absolute; bottom: 18px; right: 200px; text-align: right;
     text-shadow: 0 1px 4px rgba(0,0,0,.7); }
   #hud-speed-value { font-size: 42px; font-weight: 800; line-height: 1; }
@@ -32,8 +42,15 @@
   #hud-car-name { font-size: 14px; font-weight: 700; }
   #hud-car-cond { font-size: 12px; opacity: .9; }
   #minimap-wrap { position: absolute; bottom: 16px; right: 16px; border: 2px solid rgba(255,255,255,.65);
-    border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
-  #minimap { display: block; width: 170px; height: 170px; }
+    border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.5); pointer-events: auto; }
+  #minimap { display: block; width: 170px; height: 170px; pointer-events: auto; cursor: crosshair; }
+  #weapon-wheel { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; pointer-events: none; }
+  #weapon-wheel .slot { font-size: 11px; padding: 4px 7px; border-radius: 6px;
+    background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); white-space: nowrap; }
+  #weapon-wheel .slot.active { background: #ffd23c; color: #241a00; font-weight: 800; border-color: #ffd23c; }
+  #weapon-wheel .slot.locked { opacity: .45; }
+  #weapon-wheel.expanded .slot { font-size: 15px; padding: 8px 12px; }
   #hud-hint { position: absolute; bottom: 16px; left: 16px; font-size: 12px; opacity: .85;
     text-shadow: 0 1px 4px rgba(0,0,0,.8); }
   #toast { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%);
@@ -54,6 +71,27 @@
   .screen button.secondary { background: rgba(255,255,255,.16); color: #fff; font-size: 15px; padding: 10px 24px; }
   .screen button:hover { filter: brightness(1.1); }
   #busted-screen h1 { color: #ff5544; }
+  .cheat-list { font-size: 13px; line-height: 1.7; opacity: .85; margin-top: 10px; }
+  .cheat-list b { color: #ffd23c; }
+  #save-slots { margin-top: 14px; display: flex; gap: 8px; }
+  #save-slots button { margin-top: 0; font-size: 14px; padding: 8px 16px; }
+  #phone { position: fixed; top: 50%; right: 24px; transform: translateY(-50%); width: 330px;
+    max-height: 78vh; overflow-y: auto; z-index: 8; pointer-events: auto;
+    background: rgba(12,14,22,.94); border: 2px solid #3fa9ff; border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.6); color: #eef2ff; padding: 12px 14px; }
+  #phone-header { font-size: 16px; font-weight: 800; color: #7fc4ff; margin-bottom: 8px; }
+  #phone-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+  #phone-tabs button { pointer-events: auto; font-size: 12px; font-weight: 700; padding: 6px 9px;
+    border: 1px solid rgba(255,255,255,.3); border-radius: 7px; cursor: pointer;
+    background: rgba(255,255,255,.08); color: #fff; }
+  #phone-tabs button.active { background: #3fa9ff; color: #06121f; border-color: #3fa9ff; }
+  #phone-body { font-size: 13px; line-height: 1.55; }
+  #phone-body h3 { margin: 4px 0 8px; font-size: 15px; color: #ffd23c; }
+  #phone-body p { margin: 6px 0; }
+  #phone-body .dim { opacity: .75; }
+  #phone-body .phone-btn { pointer-events: auto; font-size: 12px; font-weight: 700; padding: 4px 10px;
+    border: none; border-radius: 6px; cursor: pointer; background: #ffd23c; color: #241a00; margin-left: 6px; }
+  #phone-footer { font-size: 11px; opacity: .6; margin-top: 10px; }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
 <script type="importmap">
@@ -70,14 +108,23 @@
     <div id="hud-stars">☆☆☆☆☆</div>
     <div id="hud-health"><div id="hud-health-fill"></div></div>
     <div id="hud-health-text">Nyawa 100</div>
+    <div id="hud-armor"><div id="hud-armor-fill"></div></div>
+    <div id="hud-armor-text">Armor 0</div>
+    <div id="hud-rank">Rank 1 Pemula · 0 RP</div>
   </div>
   <div id="hud-mission-wrap">
+    <div id="hud-act">Babak 1 · Misi 1/10 — Utang Senja</div>
     <div id="hud-mission">Misi 1 — Lari ke Dermaga</div>
     <div id="hud-mission-text">Lari ke dermaga di pantai barat. Ikuti beacon kuning.</div>
+    <div id="hud-district-text">Pusat Kota — WARY (30)</div>
+    <div id="hud-sidejob">Side job: Kota Tua — capai beacon biru (+$150, +25 RP)</div>
   </div>
   <div id="hud-top-right">
     <div id="hud-clock">17:25</div>
     <div id="hud-date">Sunset Shores</div>
+    <div id="hud-radio">♪ Radio mati</div>
+    <div id="hud-heli" class="hidden">🚁 Air-1 di atasmu!</div>
+    <div id="hud-compass">◈ U</div>
   </div>
   <div id="hud-speed" class="hidden">
     <div><span id="hud-speed-value">0</span> <span id="hud-speed-unit">km/jam</span></div>
@@ -85,18 +132,40 @@
     <div id="hud-car-cond"></div>
   </div>
   <div id="minimap-wrap"><canvas id="minimap" width="170" height="170"></canvas></div>
+  <div id="weapon-wheel">
+    <span class="slot" id="weapon-0">1 Tinju</span><span class="slot" id="weapon-1">2 Pistol</span><span class="slot" id="weapon-2">3 SMG</span><span class="slot" id="weapon-3">4 Shotgun</span><span class="slot" id="weapon-4">5 Rifle</span><span class="slot" id="weapon-5">6 Sniper</span><span class="slot" id="weapon-6">7 RPG</span><span class="slot" id="weapon-7">8 Molotov</span>
+  </div>
   <div id="hud-hint"></div>
   <div id="toast"></div>
+</div>
+
+<div id="phone" class="hidden">
+  <div id="phone-header">MaraPhone</div>
+  <div id="phone-tabs">
+    <button data-tab="Jobs" class="active">Jobs</button>
+    <button data-tab="Crew">Crew</button>
+    <button data-tab="Map">Map</button>
+    <button data-tab="Bank">Bank</button>
+    <button data-tab="Garage">Garage</button>
+    <button data-tab="Texts">Texts</button>
+  </div>
+  <div id="phone-body"></div>
+  <div id="phone-footer">P untuk menutup · ketuk tab untuk berpindah</div>
 </div>
 
 <div id="start-screen" class="screen">
   <h1>SUNSET SHORES</h1>
   <h2>Kota di tepi pantai &middot; dibintangi Mara Voss</h2>
   <p>Kota fiktif di tepi pantai, matahari sore yang hangat. Jalan kaki atau curi mobil,
-  kabur dari polisi, dan selesaikan tiga misi berantai — dari dermaga sampai antar terakhir.
-  Semua nama dan tempat di game ini orisinal.</p>
+  kabur dari polisi, dan selesaikan sepuluh misi berantai dalam tiga babak — dari dermaga
+  sampai jalan bebas. Semua nama dan tempat di game ini orisinal.</p>
   <p>WASD jalan &middot; Shift lari &middot; Spasi lompat &middot; E masuk / keluar mobil &middot;
-  F pukul &middot; H klakson &middot; Esc jeda &middot; drag mouse untuk memutar kamera</p>
+  F serang &middot; klik kiri tembak &middot; klik kanan bidik &middot; Q / 1–8 ganti senjata &middot;
+  Tab roda senjata &middot; R radio &amp; isi ulang &middot; P phone &middot; Z / X / C kru &middot;
+  H klakson &middot; Esc jeda &middot; drag mouse untuk memutar kamera</p>
+  <p class="cheat-list">Cheat (ketik di mana saja saat bermain): <b>DUITBANYAK</b> +$5000 ·
+  <b>SEHATSELALU</b> nyawa+armor penuh · <b>BEBASPOLISI</b> wanted 0 ·
+  <b>SENJATALENGKAP</b> semua senjata · <b>MOBILMEWAH</b> supercar</p>
   <button id="start-btn">▶ Mulai Bermain</button>
 </div>
 
@@ -104,6 +173,13 @@
   <h1>JEDA</h1>
   <h2>Sunset Shores menunggu…</h2>
   <button id="resume-btn">Lanjutkan</button>
+  <div id="save-slots">
+    <button id="save-slot-1" class="secondary">Simpan Slot 1</button>
+    <button id="save-slot-2" class="secondary">Simpan Slot 2</button>
+    <button id="save-slot-3" class="secondary">Simpan Slot 3</button>
+  </div>
+  <p class="cheat-list">Cheat: <b>DUITBANYAK</b> +$5000 · <b>SEHATSELALU</b> nyawa+armor penuh ·
+  <b>BEBASPOLISI</b> wanted 0 · <b>SENJATALENGKAP</b> semua senjata · <b>MOBILMEWAH</b> supercar</p>
   <button id="restart-btn" class="secondary">Mulai dari awal (hapus save)</button>
 </div>
 

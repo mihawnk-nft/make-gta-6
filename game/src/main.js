@@ -2,8 +2,13 @@
 // simulation in fixed 1/60 s slices, and renders. The game runs fully
 // offline from static files; state is exposed on window.__game for tests.
 import * as THREE from 'three';
-import { START_CASH, START_HEALTH, SPAWN } from './config.js';
-import { createInput, PRESS_ENTER_CAR, PRESS_PUNCH, PRESS_HORN, PRESS_PAUSE, PRESS_CONFIRM } from './input.js';
+import { START_CASH, START_HEALTH, START_ARMOR, SPAWN, RADIO_STATIONS } from './config.js';
+import {
+  createInput,
+  PRESS_ENTER_CAR, PRESS_PUNCH, PRESS_HORN, PRESS_PAUSE, PRESS_CONFIRM,
+  PRESS_RADIO, PRESS_PHONE, PRESS_CYCLE_WEAPON, PRESS_WHEEL,
+  PRESS_CREW_DEX, PRESS_CREW_MAYA, PRESS_CREW_REX, PRESS_RELOAD,
+} from './input.js';
 import { createAudio } from './audio.js';
 import { readSave, writeSave, clearSave, applySave } from './save.js';
 import { buildCity, updateCity } from './city.js';
@@ -14,16 +19,29 @@ import { spawnPedestrians, updatePedestrians } from './pedestrians.js';
 import { enterCar, exitCar, updateDriving } from './driving.js';
 import { updatePolice } from './police.js';
 import { createMissions, updateMissions } from './missions.js';
-import { punch, horn } from './combat.js';
+import { attack, horn, reloadWeapon, cycleWeapon, selectWeapon, updateTracers } from './combat.js';
 import { createHud } from './hud.js';
+import { createRng } from './rng.js';
+import { refreshRank, setRp } from './rank.js';
+import { freshStanding } from './districts.js';
+import { createSideJob, updateSideJob } from './sidejob.js';
+import { createCrew, useCrew, updateCrew } from './crew.js';
+import { createPhone, togglePhone } from './phone.js';
+import { applyCheat, CHEAT_CODES } from './cheats.js';
 
 const STEP = 1 / 60;
 const MAX_FRAME = 0.25;
 
 const canvas = document.getElementById('game-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+// HD render: full device pixel ratio (capped at 2), soft shadows, ACES
+// filmic tone mapping for the golden-hour look.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 600);
@@ -37,6 +55,7 @@ const G = {
     screen: 'title', // title | play | paused | busted
     cash: START_CASH,
     health: START_HEALTH,
+    armor: START_ARMOR,
     wanted: 0,
     missionIndex: 0,
     time: 0,
@@ -46,6 +65,9 @@ const G = {
     bustedTimer: 0,
     driving: false,
     bustedReason: '',
+    districtStanding: freshStanding(),
+    stats: { sideJobsDone: 0 },
+    waypoint: null,
   },
   player: null,
   car: null,
@@ -58,9 +80,26 @@ const G = {
   combatFlash: 0,
   presses: 0,
   _needsCarToast: 0,
+  // Round 3 systems.
+  rp: 0,
+  rank: 1,
+  weapon: 0,
+  ammo: {},
+  radio: '',
+  crew: [],
+  sidejob: null,
+  heli: null,
+  roadblocks: [],
+  cheatUnlocked: false,
+  cheats: CHEAT_CODES,
+  _tracers: [],
+  _cheatBuffer: '',
+  _sidejobRng: createRng(1234),
+  _lastShot: 0,
 };
+G._refreshRank = () => refreshRank(G);
 
-G.input = createInput(canvas);
+G.input = createInput(G, canvas);
 G.audio = createAudio();
 G.hud = createHud(G);
 
@@ -70,10 +109,22 @@ G.parkedCars = spawnParkedCars(G);
 G.traffic = spawnTraffic(G);
 G.peds = spawnPedestrians(G);
 G.missions = createMissions(G);
+createCrew(G);
+createSideJob(G);
+createPhone(G);
 
 // Restore a previous run, if one exists.
 const saved = readSave();
 if (saved) applySave(G, saved);
+
+// ---- radio ----
+function cycleRadio() {
+  const order = ['', ...RADIO_STATIONS];
+  const idx = order.indexOf(G.radio);
+  G.radio = order[(idx + 1) % order.length];
+  G.audio.radio(G.radio);
+  if (G.radio) G.hud.toast(`♪ Radio: ${G.radio}`);
+}
 
 // ---- screens ----
 function startGame() {
@@ -116,6 +167,16 @@ document.getElementById('busted-btn').addEventListener('click', () => {
   updateCamera(G, 0.016);
 });
 document.getElementById('busted-restart-btn').addEventListener('click', restartGame);
+for (const slot of [1, 2, 3]) {
+  const btn = document.getElementById(`save-slot-${slot}`);
+  if (btn) {
+    btn.addEventListener('click', () => {
+      writeSave(G, slot);
+      G.hud.toast(`Disimpan ke slot ${slot}`);
+      G.audio.click();
+    });
+  }
+}
 window.addEventListener('keydown', () => G.audio.unlock(), { once: false });
 window.addEventListener('pointerdown', () => G.audio.unlock(), { once: false });
 window.addEventListener('resize', () => {
@@ -143,6 +204,9 @@ function step(dt) {
   updatePolice(G, dt);
   if (s.screen !== 'play') return; // police may have triggered BUSTED
   updateMissions(G, dt);
+  updateSideJob(G, dt);
+  updateCrew(G, dt);
+  updateTracers(G, dt);
   updateCity(G, dt);
 
   saveTimer += dt;
@@ -171,25 +235,47 @@ function handlePresses() {
     return;
   }
   if (s.screen !== 'play') return;
+  if (presses & PRESS_PHONE) {
+    togglePhone(G);
+    return;
+  }
+  // Direct weapon pick (Digit 1-8) is consumed once per frame.
+  const picked = G.input.takeWeaponSelect();
+  if (picked >= 0) selectWeapon(G, picked);
+  if (presses & PRESS_CYCLE_WEAPON) cycleWeapon(G);
+  if (presses & PRESS_WHEEL) {
+    document.getElementById('weapon-wheel').classList.toggle('expanded');
+  }
+  if (presses & PRESS_RADIO) cycleRadio();
+  if (presses & PRESS_RELOAD) reloadWeapon(G);
+  if (presses & PRESS_CREW_DEX) useCrew(G, 'dex');
+  if (presses & PRESS_CREW_MAYA) useCrew(G, 'maya');
+  if (presses & PRESS_CREW_REX) useCrew(G, 'rex');
   if (presses & PRESS_ENTER_CAR) {
     if (s.driving) exitCar(G);
     else {
       const car = nearestParkedOrStopped(G, 4.5);
       if (car) {
-        // A stolen traffic car leaves the traffic list.
-        const ti = G.traffic.indexOf(car);
-        if (ti !== -1) G.traffic.splice(ti, 1);
-        else {
-          const pi = G.parkedCars.indexOf(car);
-          if (pi !== -1) G.parkedCars.splice(pi, 1);
+        // Luxury cars need the rank that owns them.
+        if (car.minRank > G.rank) {
+          G.hud.toast(`${car.name} butuh Rank ${car.minRank} — kamu masih Rank ${G.rank}`);
+          G.audio.click();
+        } else {
+          // A stolen traffic car leaves the traffic list.
+          const ti = G.traffic.indexOf(car);
+          if (ti !== -1) G.traffic.splice(ti, 1);
+          else {
+            const pi = G.parkedCars.indexOf(car);
+            if (pi !== -1) G.parkedCars.splice(pi, 1);
+          }
+          enterCar(G, car);
         }
-        enterCar(G, car);
       } else {
         G.hud.toast('Tidak ada mobil di dekatmu');
       }
     }
   }
-  if (presses & PRESS_PUNCH) punch(G);
+  if (presses & PRESS_PUNCH) attack(G);
   if (presses & PRESS_HORN) horn(G);
 }
 
@@ -215,6 +301,12 @@ function frame(now) {
     accumulator = 0;
   }
   if (G.state.screen === 'title') updateCity(G, frameDt);
+  // Right-click aim narrows the field of view.
+  const wantFov = G.input.aiming && G.state.screen === 'play' ? 42 : 62;
+  if (Math.abs(camera.fov - wantFov) > 0.1) {
+    camera.fov += (wantFov - camera.fov) * Math.min(1, frameDt * 8);
+    camera.updateProjectionMatrix();
+  }
   updateCamera(G, frameDt);
   G.hud.update();
   renderer.render(scene, camera);
@@ -232,6 +324,15 @@ window.__game = {
   get police() { return G.police; },
   get audio() { return G.audio; },
   get colliders() { return G.colliders; },
+  get renderer() { return renderer; },
+  get weapon() { return G.weapon; },
+  get radio() { return G.radio; },
+  get rp() { return G.rp; },
+  get rank() { return G.rank; },
+  get crew() { return G.crew; },
+  get heli() { return G.heli; },
+  get roadblocks() { return G.roadblocks; },
+  get cheats() { return G.cheats; },
   start: startGame,
   pause: pauseGame,
   resume: resumeGame,
@@ -247,7 +348,9 @@ window.__game = {
   setWanted(n) { G.state.wanted = n; G.state.chaseTimer = 0; G.state.hiddenTimer = 0; },
   setCash(n) { G.state.cash = n; },
   setMission(i) { G.state.missionIndex = i; },
-  save() { return writeSave(G); },
+  setRP(n) { setRp(G, n); },
+  cheat(code) { return applyCheat(G, code); },
+  save(slot) { return writeSave(G, slot); },
   load() { const d = readSave(); if (d) applySave(G, d); return d; },
   clearSave,
 };
