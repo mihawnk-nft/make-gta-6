@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Diagnostic playtest shots: live game, orbit the camera and walk a bit,
 // to find the floating rooftop box reported from M1 playtesting.
 import { chromium } from 'playwright-core';

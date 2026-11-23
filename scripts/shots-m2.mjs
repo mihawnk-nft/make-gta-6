@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Take the M2 staged screenshots (2-drive, 3-chase, 4-mission) via the
 // game's own ?shot= staging paths. Cover (1-cover.jpg) is left alone.
 import { chromium } from 'playwright-core';

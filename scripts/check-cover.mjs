@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Regression check: the M1 cover staging still renders after the M2 edits.
 import { chromium } from 'playwright-core';
 

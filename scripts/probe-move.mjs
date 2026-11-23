@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Probe: hold W for 3s and read the player's exact position via __sunset.
 import { chromium } from 'playwright-core';
 

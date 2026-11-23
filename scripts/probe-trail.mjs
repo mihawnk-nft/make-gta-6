@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Probe: hold W, turn once toward the mission target, sample the trail.
 import { chromium } from 'playwright-core';
 

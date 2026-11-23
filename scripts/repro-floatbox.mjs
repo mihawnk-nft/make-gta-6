@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Reproduce the floating rooftop box: walk Mara downtown to the tall
 // towers, then orbit/pitch the camera up against a tower and shoot.
 import { chromium } from 'playwright-core';

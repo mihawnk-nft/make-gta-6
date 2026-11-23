@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Smoke test for the Sunset Shores rebuild: loads the game, starts it,
 // polls live state, and reports console errors. Run: node scripts/smoke.mjs
 import { chromium } from 'playwright-core';

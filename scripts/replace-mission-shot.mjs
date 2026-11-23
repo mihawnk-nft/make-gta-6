@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Re-stage only 4-mission.jpg via the game's own ?shot=mission path,
 // after the M3 palm fix moved the palm off the mission-1 beacon beam.
 import { chromium } from 'playwright-core';

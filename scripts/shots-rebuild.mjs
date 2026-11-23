@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Screenshot capture for the Sunset Shores rebuild (gta6-01). Four real
 // gameplay frames at 1280x720, JPEG, each checked <= 256 KiB.
 // Run: node scripts/shots-rebuild.mjs

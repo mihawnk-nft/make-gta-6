@@ -1,3 +1,4 @@
+// Round 3 (recorded session): revisited — this helper still serves the rebuilt game; see test-rebuild.mjs for the live checks.
 // Probe: do Playwright keyboard events reach the page's window keydown?
 import { chromium } from 'playwright-core';
 
